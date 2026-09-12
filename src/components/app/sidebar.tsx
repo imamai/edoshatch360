@@ -22,15 +22,17 @@ export function Sidebar({
   mode,
   canWrite,
   plan,
+  isPlatformAdmin,
 }: {
   role: Role;
   mode: FarmMode;
   canWrite: boolean;
   /** Null for an organisation with no subscription — nothing is hidden. */
   plan: PlanCode | null;
+  isPlatformAdmin: boolean;
 }) {
   const pathname = usePathname();
-  const groups = visibleGroups(role, mode, canWrite, plan);
+  const groups = visibleGroups(role, mode, canWrite, plan, isPlatformAdmin);
   const active = activeHref(
     pathname,
     groups.flatMap((g) => g.items.map((i) => i.href)),

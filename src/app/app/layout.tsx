@@ -30,7 +30,7 @@ export default async function AppLayout({
       {/* .app-ui switches the working application onto its own typographic
           scale — see globals.css. The marketing site keeps its own. */}
       <div className="app-ui flex min-h-screen bg-canvas">
-        <Sidebar role={session.role} mode={session.mode} canWrite={canWrite} plan={plan.code} />
+        <Sidebar role={session.role} mode={session.mode} canWrite={canWrite} plan={plan.code} isPlatformAdmin={session.isPlatformAdmin} />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar

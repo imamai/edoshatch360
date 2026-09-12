@@ -1,7 +1,7 @@
 import {
   BarChart3, Bird, Boxes, ClipboardList, Coins, Egg, FileText,
   Home, LayoutGrid, MapPin, Receipt, Settings,
-  Sparkles, Syringe, Tags, Users, Wheat,
+  ShieldCheck, Sparkles, Syringe, Tags, Users, Wheat,
 } from "lucide-react";
 import type { FarmMode, Role } from "@/lib/database.types";
 import { planAllows, type PlanCode, type PlanFeature } from "@/lib/plans";
@@ -24,6 +24,8 @@ export interface NavItem {
    * is part of the product everyone gets.
    */
   feature?: PlanFeature;
+  /** EDOS staff only — never shown to a farm, whatever their role. */
+  platformAdminOnly?: boolean;
 }
 
 export interface NavGroup {
@@ -89,7 +91,15 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: null,
-    items: [{ href: "/app/settings", label: "Settings", icon: Settings, roles: ADMIN }],
+    items: [
+      { href: "/app/settings", label: "Settings", icon: Settings, roles: ADMIN },
+      {
+        href: "/app/admin",
+        label: "Platform",
+        icon: ShieldCheck,
+        platformAdminOnly: true,
+      },
+    ],
   },
 ];
 
@@ -108,7 +118,11 @@ function allowed(
   mode: FarmMode,
   canWrite: boolean,
   plan: PlanCode | null,
+  isPlatformAdmin: boolean,
 ): boolean {
+  // Checked first and on its own: a platform entry is not subject to the
+  // farm's role, mode or plan, and nothing else may appear because of it.
+  if (item.platformAdminOnly) return isPlatformAdmin;
   return (
     (!item.roles || item.roles.includes(role)) &&
     (!item.advancedOnly || mode === "advanced") &&
@@ -122,10 +136,13 @@ export function visibleGroups(
   mode: FarmMode,
   canWrite = true,
   plan: PlanCode | null = null,
+  isPlatformAdmin = false,
 ): NavGroup[] {
   return NAV_GROUPS.map((group) => ({
     title: group.title,
-    items: group.items.filter((item) => allowed(item, role, mode, canWrite, plan)),
+    items: group.items.filter((item) =>
+      allowed(item, role, mode, canWrite, plan, isPlatformAdmin),
+    ),
   })).filter((group) => group.items.length > 0);
 }
 
