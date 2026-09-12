@@ -298,3 +298,36 @@ h1, h2, h3, h4 {
   .print\:hidden { display: none !important; }
   body { background: #fff; }
 }
+
+/* Printing a document that is showing inside a modal.
+ *
+ * The Counter issues a sale and then shows the document over the till. Asking
+ * the browser to print at that moment would otherwise print the whole app
+ * around it, so everything is made invisible and only the sheet is restored.
+ *
+ * `visibility` rather than `display`: hiding ancestors with `display:none`
+ * would take the sheet down with them, since it lives inside them.
+ * The rules are scoped to `:has(.print-sheet)` so no other page is affected —
+ * the standalone document page keeps printing exactly as it did.
+ */
+@media print {
+  body:has(.print-sheet) * {
+    visibility: hidden;
+  }
+
+  body:has(.print-sheet) .print-sheet,
+  body:has(.print-sheet) .print-sheet * {
+    visibility: visible;
+  }
+
+  body:has(.print-sheet) .print-sheet {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    max-height: none;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: #fff;
+  }
+}

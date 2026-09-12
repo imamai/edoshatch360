@@ -68,6 +68,11 @@ export async function askAssistant(_prev: AskState, form: FormData): Promise<Ask
       tenant_id: session.tenant.id,
       role: "user",
       body: question,
+      // Explicit, even though the column defaults to '[]'. In a multi-row
+      // insert PostgREST builds one column list from the union of the keys
+      // and sends NULL for whatever a row is missing — the default never
+      // applies, and the NOT NULL constraint rejects the whole batch.
+      evidence: [],
     },
     {
       conversation_id: conversationId,
@@ -82,7 +87,12 @@ export async function askAssistant(_prev: AskState, form: FormData): Promise<Ask
     },
   ]);
 
-  if (insertError) return { error: "We couldn't save that exchange. Try again." };
+  if (insertError) {
+    // The reply is still shown; only the record of it failed. Log the real
+    // cause — this failure was invisible for weeks behind a friendly message.
+    console.error("edoshatch360: could not save assistant exchange", insertError);
+    return { error: "We couldn't save that exchange. Try again." };
+  }
 
   // Bump the conversation so it sorts to the top of the saved list.
   await supabase

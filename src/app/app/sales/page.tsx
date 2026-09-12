@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FileText, Plus, Receipt, TrendingUp, Wallet } from "lucide-react";
+import { FileText, Plus, Receipt, ShoppingCart, TrendingUp, Wallet } from "lucide-react";
 
 import { CAN_SEE_MONEY, can, requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
@@ -12,7 +12,8 @@ import { Badge, type Tone } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ButtonLink } from "@/components/ui/button";
 import { formatMoney, relativeDay, today } from "@/lib/utils";
-import type { Customer, Sale, SaleStatus } from "@/lib/database.types";
+import type { Customer, DocType, Sale, SaleStatus } from "@/lib/database.types";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Sales" };
 
@@ -32,9 +33,53 @@ const DOC_LABEL = {
   receipt: "Receipt",
 } as const;
 
-export default async function SalesPage() {
+/**
+ * The filtered views the sidebar links to. One list, one `doc_type` filter —
+ * no separate pages, no separate queries.
+ */
+const VIEWS: { key: DocType | "all"; label: string; title: string; lead: string }[] = [
+  {
+    key: "all",
+    label: "All",
+    title: "Sales",
+    lead: "Quotations, invoices and receipts — and who still owes you.",
+  },
+  {
+    key: "invoice",
+    label: "Invoices",
+    title: "Invoices",
+    lead: "Issued and awaiting payment, or settled.",
+  },
+  {
+    key: "receipt",
+    label: "Receipts",
+    title: "Receipts",
+    lead: "Money already taken, at the counter or in the field.",
+  },
+  {
+    key: "quotation",
+    label: "Quotations",
+    title: "Quotations",
+    lead: "Prices you have offered. Not yet a sale.",
+  },
+  {
+    key: "order",
+    label: "Sales orders",
+    title: "Sales orders",
+    lead: "Agreed with the customer, not yet invoiced.",
+  },
+];
+
+export default async function SalesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string }>;
+}) {
   const session = await requireSession();
   if (!can(session.role, CAN_SEE_MONEY)) notFound();
+
+  const params = await searchParams;
+  const view = VIEWS.find((v) => v.key === params.type) ?? VIEWS[0];
 
   const supabase = await createClient();
   const monthStart = `${today().slice(0, 7)}-01`;
@@ -78,19 +123,57 @@ export default async function SalesPage() {
 
   const openQuotes = sales.filter((s) => s.doc_type === "quotation" && s.status === "sent").length;
 
+  // The figures above are the farm's, whatever is being looked at. Only the
+  // table below narrows — a filter should not silently change a KPI.
+  const shown = view.key === "all" ? sales : sales.filter((s) => s.doc_type === view.key);
+  const countFor = (key: DocType | "all") =>
+    key === "all" ? sales.length : sales.filter((s) => s.doc_type === key).length;
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">Sales</h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            Quotations, invoices and receipts — and who still owes you.
-          </p>
+          <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
+            {view.title}
+          </h1>
+          <p className="mt-1 text-sm text-ink-soft">{view.lead}</p>
         </div>
-        <ButtonLink href="/app/sales/new" size="sm">
-          <Plus className="h-4 w-4" />
-          New sale
-        </ButtonLink>
+        <div className="flex flex-wrap items-center gap-2">
+          <ButtonLink href="/app/sales/new" size="sm" variant="secondary">
+            <Plus className="h-4 w-4" />
+            New sale
+          </ButtonLink>
+          <ButtonLink href="/app/sales/counter" size="sm">
+            <ShoppingCart className="h-4 w-4" />
+            Counter
+          </ButtonLink>
+        </div>
+      </div>
+
+      {/* On a phone there is no sidebar tree, so the same views live here as
+          chips. On desktop they mirror the sidebar and either route works. */}
+      <div className="scroll-slim -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+        {VIEWS.map((v) => {
+          const isOn = v.key === view.key;
+          return (
+            <Link
+              key={v.key}
+              href={v.key === "all" ? "/app/sales" : `/app/sales?type=${v.key}`}
+              aria-current={isOn ? "page" : undefined}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                isOn
+                  ? "border-brand bg-brand text-white"
+                  : "border-line bg-surface text-ink-soft hover:border-brand hover:text-brand",
+              )}
+            >
+              {v.label}
+              <span className={cn("tnum", isOn ? "text-white/70" : "text-ink-faint")}>
+                {countFor(v.key)}
+              </span>
+            </Link>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -123,17 +206,23 @@ export default async function SalesPage() {
 
       <Card>
         <CardHeader
-          title="All documents"
-          subtitle="Most recent first"
+          title={view.key === "all" ? "All documents" : view.title}
+          subtitle={`${shown.length} ${shown.length === 1 ? "document" : "documents"}, most recent first`}
           icon={<Receipt className="h-4 w-4" />}
         />
         <CardBody className="p-0">
-          {sales.length === 0 ? (
+          {shown.length === 0 ? (
             <EmptyState
               icon={<Receipt className="h-6 w-6" />}
-              title="No sales recorded yet"
-              description="Record your first sale and the revenue, profit and customer figures across Hatch360 start filling in."
-              action={<ButtonLink href="/app/sales/new">Record a sale</ButtonLink>}
+              title={
+                view.key === "all" ? "No sales recorded yet" : `No ${view.label.toLowerCase()} yet`
+              }
+              description={
+                view.key === "all"
+                  ? "Record your first sale and the revenue, profit and customer figures across Hatch360 start filling in."
+                  : "Nothing of this kind has been issued. The Counter is the quickest way to raise one."
+              }
+              action={<ButtonLink href="/app/sales/counter">Open the Counter</ButtonLink>}
             />
           ) : (
             <div className="overflow-x-auto">
@@ -149,7 +238,7 @@ export default async function SalesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {sales.map((s) => (
+                  {shown.map((s) => (
                     <tr key={s.id} className="hover:bg-surface-sunk">
                       <td className="px-4 py-3 sm:px-5">
                         <Link

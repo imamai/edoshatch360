@@ -107,6 +107,32 @@ stock until matching farm photographs exist.
 
 ---
 
+## 3. Product tiles — `public/images/products/`
+
+Default photograph per product category, used by a Counter tile until the farm
+uploads a picture of its own stock. Two are the customer's own houses and carry
+the same all-rights-reserved terms as the `farm/` set above.
+
+| File | Source | Terms |
+|---|---|---|
+| `live_birds.jpg` | Crop of `farm/pullets-close.jpg` — the customer's own birds | **All rights reserved** |
+| `chicks.jpg` | Crop of `farm/brooder-close.jpg` — the customer's own brooder | **All rights reserved** |
+| `eggs.jpg` | Crop of `eggs-trays.jpg` | Unsplash |
+| `spent_layers.jpg` | Crop of `layer-hen.jpg` | Unsplash |
+| `feed.jpg` | Crop of `feeding.jpg` | Unsplash |
+| `processed_birds.jpg` | Unsplash `1587593810167-a84920ea0781` — whole raw chicken | Unsplash |
+| `manure.jpg` | Unsplash `1708432331128-cfe5a2803781` — composted organic matter | Unsplash |
+
+All are 720x540, smart-cropped to the most salient region so a tile never
+lands on an empty corner of the frame.
+
+**These are defaults, not the farm's produce.** A photograph of somebody
+else's dressed chicken is a placeholder, and the honest fix is the farm
+uploading its own through `edoshatch360_products.photo_url`. The tile prefers
+that whenever it exists.
+
+---
+
 Every image in either set is replaceable from the admin CMS without a code
 change: the pages read `edoshatch360_cms_sections.image_url` and fall back to
 these files.

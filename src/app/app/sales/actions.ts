@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireSession } from "@/lib/data/session";
+import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { today } from "@/lib/utils";
 import type { CustomerType, DocType, PayMethod } from "@/lib/database.types";
 
@@ -207,4 +207,132 @@ export async function createCustomer(
   revalidatePath("/app/customers");
   revalidatePath("/app/sales");
   return { error: null, ok: `${name} added.` };
+}
+
+/* ------------------------------------------------------------- counter -- */
+
+export interface CounterLine {
+  productId: string | null;
+  description: string;
+  quantity: number;
+  unitPriceCents: number;
+  discountCents: number;
+}
+
+export interface IssueSaleInput {
+  docType: DocType;
+  customerId: string | null;
+  dueDate: string | null;
+  paymentMethod: PayMethod | null;
+  amountPaidCents: number;
+  paymentReference: string | null;
+  notes: string | null;
+  lines: CounterLine[];
+}
+
+export interface IssueSaleResult {
+  error: string | null;
+  saleId?: string;
+  docNumber?: string;
+}
+
+/**
+ * The Counter's version of createSale: it returns the new document instead of
+ * redirecting to it, so the till can show the issued receipt in place and take
+ * the next customer without a page load.
+ *
+ * Amounts arrive already in cents. The Counter works in integers throughout —
+ * a till that rounds is a till that loses money.
+ *
+ * The document number is allocated HERE and not when the screen opens, so an
+ * abandoned cart never burns a number out of a tax-invoice sequence.
+ */
+export async function issueSale(input: IssueSaleInput): Promise<IssueSaleResult> {
+  const session = await requireSession();
+  if (!can(session.role, CAN_WRITE)) {
+    return { error: "Your account can view sales but not record them." };
+  }
+
+  const lines = input.lines.filter(
+    (l) => l.description.trim() && l.quantity > 0 && l.unitPriceCents >= 0,
+  );
+  if (lines.length === 0) {
+    return { error: "Add at least one item before completing the sale." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: docNumber, error: numberError } = await supabase.rpc(
+    "edoshatch360_next_doc_number",
+    { p_tenant: session.tenant.id, p_type: input.docType },
+  );
+  if (numberError || !docNumber) {
+    return { error: "We couldn't allocate a document number. Try again." };
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: sale, error } = await supabase
+    .from("edoshatch360_sales")
+    .insert({
+      tenant_id: session.tenant.id,
+      farm_id: session.farms[0]?.id ?? null,
+      customer_id: input.customerId,
+      doc_type: input.docType,
+      doc_number: docNumber as string,
+      sale_date: today(),
+      due_date: input.dueDate,
+      payment_method: input.paymentMethod,
+      status: input.docType === "quotation" ? "sent" : "draft",
+      notes: input.notes?.trim() || null,
+      created_by: user?.id ?? null,
+    })
+    .select("id, doc_number")
+    .single();
+
+  if (error || !sale) {
+    return { error: "We couldn't save that sale. Try again." };
+  }
+
+  const { error: lineError } = await supabase.from("edoshatch360_sale_items").insert(
+    lines.map((l, i) => ({
+      tenant_id: session.tenant.id,
+      sale_id: sale.id,
+      product_id: l.productId,
+      description: l.description.trim(),
+      quantity: l.quantity,
+      unit_price_cents: l.unitPriceCents,
+      discount_cents: Math.max(0, l.discountCents),
+      line_total_cents: Math.max(
+        0,
+        Math.round(l.quantity * l.unitPriceCents) - Math.max(0, l.discountCents),
+      ),
+      sort_order: i,
+    })),
+  );
+
+  if (lineError) {
+    // Roll back the orphaned header rather than leave an empty invoice behind.
+    await supabase.from("edoshatch360_sales").delete().eq("id", sale.id);
+    return { error: "We couldn't save the items on that sale. Try again." };
+  }
+
+  if (input.amountPaidCents > 0 && input.docType !== "quotation") {
+    await supabase.from("edoshatch360_customer_payments").insert({
+      tenant_id: session.tenant.id,
+      sale_id: sale.id,
+      amount_cents: input.amountPaidCents,
+      method: input.paymentMethod ?? "cash",
+      reference: input.paymentReference?.trim() || null,
+      received_by: user?.id ?? null,
+    });
+  }
+
+  revalidatePath("/app/sales");
+  revalidatePath("/app/finance");
+  revalidatePath("/app");
+
+  return { error: null, saleId: sale.id, docNumber: sale.doc_number as string };
 }
