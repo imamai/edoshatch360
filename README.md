@@ -160,14 +160,27 @@ which is the authoritative record.
 write them to the repo. To pull them down:
 
 ```bash
-npm i -D pg
-SUPABASE_DB_URL="postgresql://postgres.<ref>:<password>@<host>:5432/postgres" \
+SUPABASE_DB_URL="postgresql://postgres.cnlyuwslpcgosgwdmzav:<password>@aws-0-eu-west-1.pooler.supabase.com:5432/postgres" \
   node scripts/export-migrations.mjs
 ```
 
-The connection string is on the dashboard under **Project settings →
-Database → Connection string (URI)**. Do this before the next schema change,
-so the repo can rebuild the database without the live project.
+`pg` is a devDependency now, so that is the whole command. Two things about
+that connection string were learned the hard way:
+
+- **Use the session pooler host above.** The direct host,
+  `db.cnlyuwslpcgosgwdmzav.supabase.co`, no longer resolves over IPv4 and
+  fails with `ENOTFOUND`.
+- **`<password>` is the database password, not the Supabase account
+  password.** They are different, and the wrong one still reaches Postgres
+  and is rejected with `28P01` — which looks like a connectivity problem and
+  is not one. If nobody has it, reset it under **Project settings → Database
+  → Database password**. That rotates the Postgres role only; it does not
+  touch the anon or service-role keys the apps authenticate with, so neither
+  Hatch360 nor the POS application is affected. URL-encode it — `@` becomes
+  `%40`.
+
+Do this before the next schema change, so the repo can rebuild the database
+without the live project.
 
 ### Some decisions worth knowing
 
