@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, Wallet } from "lucide-react";
 
 import { CAN_SEE_MONEY, can, requireSession } from "@/lib/data/session";
+import { getBrandingWithUrls } from "@/lib/data/branding";
 import { createClient } from "@/lib/supabase/server";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -49,6 +50,7 @@ export default async function SaleDetailPage({
   if (!sale) notFound();
   const doc = sale as Sale;
 
+  const branding = await getBrandingWithUrls(session.tenant.id);
   const [itemRes, paymentRes, customerRes] = await Promise.all([
     supabase.from("edoshatch360_sale_items").select("*").eq("sale_id", id).order("sort_order"),
     supabase
@@ -85,7 +87,18 @@ export default async function SaleDetailPage({
         <CardBody className="sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-start gap-3">
-              <LogoMark className="h-9 w-9 text-brand" />
+              {branding.logoUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element --
+                   a short-lived signed URL; next/image would cache a URL that
+                   expires, and this has to survive being sent to a printer. */
+                <img
+                  src={branding.logoUrl}
+                  alt={`${tenant.name} logo`}
+                  className="h-12 max-w-[9rem] object-contain object-left"
+                />
+              ) : (
+                <LogoMark className="h-9 w-9 text-brand" />
+              )}
               <div>
                 <p className="font-display text-lg font-extrabold text-ink">{tenant.name}</p>
                 <div className="mt-0.5 text-xs leading-relaxed text-ink-soft">
@@ -228,6 +241,44 @@ export default async function SaleDetailPage({
             <p className="mt-5 border-t border-line pt-4 text-sm leading-relaxed text-ink-soft">
               {doc.notes}
             </p>
+          )}
+
+          {/* Signature block.
+              Shown whenever there is anything to sign with — the image, or
+              just a name. With a name but no uploaded signature it still
+              prints the rule, so the document can be signed by hand, which is
+              how most of these are actually issued. */}
+          {(branding.signatureUrl || branding.signatoryName) && (
+            <div className="mt-8 flex justify-end">
+              <div className="w-56 text-center">
+                <div className="flex h-14 items-end justify-center">
+                  {branding.signatureUrl && (
+                    /* eslint-disable-next-line @next/next/no-img-element --
+                       short-lived signed URL; see the logo above. */
+                    <img
+                      src={branding.signatureUrl}
+                      alt={
+                        branding.signatoryName
+                          ? `Signature of ${branding.signatoryName}`
+                          : "Authorised signature"
+                      }
+                      className="max-h-14 max-w-full object-contain"
+                    />
+                  )}
+                </div>
+                <div className="border-t border-line-strong pt-1.5">
+                  {branding.signatoryName && (
+                    <p className="text-sm font-semibold text-ink">{branding.signatoryName}</p>
+                  )}
+                  {branding.signatoryTitle && (
+                    <p className="text-xs text-ink-soft">{branding.signatoryTitle}</p>
+                  )}
+                  <p className="mt-0.5 text-[0.6875rem] tracking-wide text-ink-faint uppercase">
+                    Authorised signature
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
 
           <p className="mt-6 border-t border-line pt-4 text-center text-xs text-ink-faint">

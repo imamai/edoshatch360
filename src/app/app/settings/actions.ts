@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { CAN_ADMIN, can, requireSession } from "@/lib/data/session";
+import {
+  ACCEPTED_IMAGE_TYPES, BRANDING_BUCKET, BRANDING_KEY, LOGO_MAX_BYTES,
+  getBranding,
+} from "@/lib/data/branding";
 import type { FarmMode } from "@/lib/database.types";
 
 export interface SettingsFormState {
@@ -141,4 +145,126 @@ export async function updateMpesa(
     till: String(form.get("mpesa_till") ?? "").trim(),
     account_name: String(form.get("mpesa_account") ?? "").trim(),
   });
+}
+
+/* ------------------------------------------------------ document branding -- */
+
+type BrandingAsset = "logo" | "signature";
+
+const EXTENSION: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+};
+
+const LABEL: Record<BrandingAsset, string> = {
+  logo: "logo",
+  signature: "signature",
+};
+
+/**
+ * Validates an uploaded mark and puts it in the tenant's storage folder.
+ *
+ * Returns the new path, or an error message fit to show a person. The file
+ * name carries a timestamp so a replacement never collides with a cached copy
+ * of the old one.
+ */
+async function putAsset(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+  asset: BrandingAsset,
+  file: File,
+): Promise<{ path?: string; error?: string }> {
+  if (file.size > LOGO_MAX_BYTES) {
+    return {
+      error: `That ${LABEL[asset]} is ${(file.size / 1024 / 1024).toFixed(1)}MB. Keep it under 2MB.`,
+    };
+  }
+  if (!ACCEPTED_IMAGE_TYPES.includes(file.type as (typeof ACCEPTED_IMAGE_TYPES)[number])) {
+    return { error: `The ${LABEL[asset]} must be a PNG, JPG or WEBP image.` };
+  }
+
+  const path = `${tenantId}/${asset}-${Date.now()}.${EXTENSION[file.type]}`;
+  const { error } = await supabase.storage
+    .from(BRANDING_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: false });
+
+  if (error) {
+    return { error: `We couldn't upload the ${LABEL[asset]}. Try again.` };
+  }
+  return { path };
+}
+
+/**
+ * Saves the logo, the signature and who the signature belongs to.
+ *
+ * One form and one save, because they are one decision: what a customer sees
+ * at the top and bottom of a document. Files are optional on every save — a
+ * tenant changing only the signatory's title should not have to re-upload
+ * two images.
+ */
+export async function updateBranding(
+  _prev: SettingsFormState,
+  form: FormData,
+): Promise<SettingsFormState> {
+  const session = await requireSession();
+  if (!can(session.role, CAN_ADMIN)) {
+    return { error: "Only the account owner can change these settings.", ok: null };
+  }
+
+  const supabase = await createClient();
+  const tenantId = session.tenant.id;
+  const current = await getBranding(tenantId);
+
+  let logoPath = current.logoPath;
+  let signaturePath = current.signaturePath;
+  const superseded: string[] = [];
+
+  for (const asset of ["logo", "signature"] as const) {
+    const existing = asset === "logo" ? current.logoPath : current.signaturePath;
+    const file = form.get(asset);
+    const remove = form.get(`remove_${asset}`) === "on";
+
+    // A removal and a replacement in the same save: the new file wins, since
+    // uploading one is the more deliberate act.
+    if (file instanceof File && file.size > 0) {
+      const result = await putAsset(supabase, tenantId, asset, file);
+      if (result.error) return { error: result.error, ok: null };
+      if (existing) superseded.push(existing);
+      if (asset === "logo") logoPath = result.path!;
+      else signaturePath = result.path!;
+    } else if (remove && existing) {
+      superseded.push(existing);
+      if (asset === "logo") logoPath = null;
+      else signaturePath = null;
+    }
+  }
+
+  const { error } = await supabase.from("edoshatch360_settings").upsert(
+    {
+      tenant_id: tenantId,
+      key: BRANDING_KEY,
+      value: {
+        logo_path: logoPath,
+        signature_path: signaturePath,
+        signatory_name: String(form.get("signatory_name") ?? "").trim(),
+        signatory_title: String(form.get("signatory_title") ?? "").trim(),
+      },
+      updated_by: session.user.id,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "tenant_id,key" },
+  );
+
+  if (error) return { error: "We couldn't save that. Try again.", ok: null };
+
+  // Only now that the record points elsewhere. Doing this first would leave
+  // documents pointing at a file that no longer exists if the save failed.
+  if (superseded.length > 0) {
+    await supabase.storage.from(BRANDING_BUCKET).remove(superseded);
+  }
+
+  revalidatePath("/app/settings");
+  revalidatePath("/app/sales", "layout");
+  return { error: null, ok: "Saved. It will appear on your next document." };
 }

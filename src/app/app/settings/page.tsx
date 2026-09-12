@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  Building2, CreditCard, Landmark, Receipt, Smartphone, Users,
+  Building2, CreditCard, Landmark, Receipt, Signature, Smartphone, Users,
 } from "lucide-react";
 
 import { CAN_ADMIN, can, requireSession } from "@/lib/data/session";
@@ -10,7 +10,10 @@ import { createClient } from "@/lib/supabase/server";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { BusinessForm, EtimsForm, MpesaForm, TaxForm } from "./settings-forms";
+import {
+  BrandingForm, BusinessForm, EtimsForm, MpesaForm, TaxForm,
+} from "./settings-forms";
+import { getBrandingWithUrls } from "@/lib/data/branding";
 import { formatDate, formatMoney, formatNumber, initials } from "@/lib/utils";
 import type { AppUser, Plan, Subscription, TenantSetting } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
@@ -19,6 +22,7 @@ export const metadata: Metadata = { title: "Settings" };
 
 const TABS = [
   { key: "business", label: "Business", icon: Building2 },
+  { key: "branding", label: "Logo & signature", icon: Signature },
   { key: "tax", label: "Tax & invoices", icon: Receipt },
   { key: "etims", label: "eTIMS", icon: Landmark },
   { key: "mpesa", label: "M-Pesa", icon: Smartphone },
@@ -44,6 +48,7 @@ export default async function SettingsPage({
   const tab = TABS.find((t) => t.key === params.tab)?.key ?? "business";
 
   const supabase = await createClient();
+  const branding = await getBrandingWithUrls(session.tenant.id);
   const [settingRes, subRes, memberRes] = await Promise.all([
     supabase.from("edoshatch360_settings").select("*").eq("tenant_id", session.tenant.id),
     supabase
@@ -121,6 +126,25 @@ export default async function SettingsPage({
             />
             <CardBody>
               <BusinessForm tenant={session.tenant} />
+            </CardBody>
+          </Card>
+        )}
+
+        {tab === "branding" && (
+          <Card>
+            <CardHeader
+              title="Logo & signature"
+              subtitle="The marks printed on quotations, orders, invoices and receipts"
+              icon={<Signature className="h-4 w-4" />}
+            />
+            <CardBody>
+              <BrandingForm
+                logoUrl={branding.logoUrl}
+                signatureUrl={branding.signatureUrl}
+                signatoryName={branding.signatoryName}
+                signatoryTitle={branding.signatoryTitle}
+                canEdit={can(session.role, CAN_ADMIN)}
+              />
             </CardBody>
           </Card>
         )}

@@ -226,6 +226,36 @@ one-for-one. **If you change one, change the other in the same commit.**
 
 ---
 
+## Document branding
+
+**Settings → Logo & signature** lets the account owner upload a business logo
+and an authorised signature. Both are printed on every quotation, sales order,
+invoice and receipt, alongside the signatory's name and title.
+
+The bucket (`edoshatch360-branding`) is **private**, and the documents read it
+through signed URLs that last an hour. A scanned handwritten signature sitting
+on a permanent public URL is a forgery risk, so what is stored in
+`edoshatch360_settings` is a storage *path*, never a URL — a URL would expire
+and be wrong the next time anyone opened the document.
+
+Access mirrors the app's roles exactly, and is enforced by storage policies
+rather than by the interface:
+
+- **Read** — any active member of the tenant. Anyone who can open an invoice
+  can already see the marks on it.
+- **Write** — owners only, matching `CAN_ADMIN`. Changing the signature on
+  every future invoice is not a staff-level action.
+
+Paths are `<tenant_id>/<asset>-<timestamp>.<ext>`, so the first folder segment
+is the tenancy boundary the policies check. Replacing a mark uploads the new
+file first and deletes the old one only after the record points elsewhere —
+the other order would strand documents on a file that no longer exists.
+
+`edoshatch360_tenants.logo_url` is deliberately left unused: it was designed
+to hold a permanent public URL, which this scheme cannot produce.
+
+---
+
 ## Offline
 
 The offline promise is real, and it is the IndexedDB queue in

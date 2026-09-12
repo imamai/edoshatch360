@@ -1,10 +1,11 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { CheckCircle2, Lock } from "lucide-react";
+import { CheckCircle2, Lock, PenLine, Upload } from "lucide-react";
 
 import {
-  updateBusiness, updateEtims, updateMpesa, updateTax, type SettingsFormState,
+  updateBranding, updateBusiness, updateEtims, updateMpesa, updateTax,
+  type SettingsFormState,
 } from "./actions";
 import { Button } from "@/components/ui/button";
 import { SelectInput, TextArea, TextInput } from "@/components/ui/field";
@@ -340,6 +341,159 @@ export function MpesaForm({
         These are your public collection details only. Hatch360 never asks for or stores
         your M-Pesa PIN, API secret or any other credential.
       </p>
+    </form>
+  );
+}
+
+/* ------------------------------------------------------ document branding -- */
+
+/**
+ * One uploader: the current mark, a file picker, and a way to take it off.
+ *
+ * The preview is drawn on a chequerboard, because these are almost always
+ * transparent PNGs and a white mark on a white card looks like a failed
+ * upload. `key` is bumped by the parent after a save so the file input clears
+ * rather than continuing to show a filename that has already been consumed.
+ */
+function MarkUpload({
+  name,
+  label,
+  hint,
+  currentUrl,
+  previewClass,
+}: {
+  name: "logo" | "signature";
+  label: string;
+  hint: string;
+  currentUrl: string | null;
+  previewClass: string;
+}) {
+  const [chosen, setChosen] = useState<string | null>(null);
+
+  return (
+    <div className="rounded-xl border border-line p-4">
+      <p className="text-sm font-medium text-ink">{label}</p>
+      <p className="mt-1 text-xs leading-relaxed text-ink-soft">{hint}</p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-4">
+        <div
+          className="flex shrink-0 items-center justify-center rounded-lg border border-line bg-[repeating-conic-gradient(var(--color-surface)_0_25%,transparent_0_50%)] bg-[length:12px_12px] p-2"
+          style={{ minWidth: "7rem", minHeight: "4.5rem" }}
+        >
+          {chosen ?? currentUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element --
+               the source is a short-lived signed URL or a local object URL;
+               next/image would try to cache and re-sign neither. */
+            <img
+              src={chosen ?? currentUrl!}
+              alt={`Current ${label.toLowerCase()}`}
+              className={previewClass}
+            />
+          ) : (
+            <span className="px-3 text-xs text-ink-faint">Nothing yet</span>
+          )}
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-2">
+          <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-ink hover:border-brand">
+            <Upload className="h-4 w-4" />
+            {currentUrl ? "Replace" : "Choose file"}
+            <input
+              type="file"
+              name={name}
+              accept="image/png,image/jpeg,image/webp"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                setChosen(file ? URL.createObjectURL(file) : null);
+              }}
+            />
+          </label>
+          <p className="text-xs text-ink-faint">PNG, JPG or WEBP, up to 2MB.</p>
+
+          {currentUrl && (
+            <label className="flex items-center gap-2 text-xs text-ink-soft">
+              <input type="checkbox" name={`remove_${name}`} className="h-3.5 w-3.5" />
+              Remove it from documents
+            </label>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function BrandingForm({
+  logoUrl,
+  signatureUrl,
+  signatoryName,
+  signatoryTitle,
+  canEdit,
+}: {
+  logoUrl: string | null;
+  signatureUrl: string | null;
+  signatoryName: string | null;
+  signatoryTitle: string | null;
+  canEdit: boolean;
+}) {
+  const [state, action, pending] = useActionState(updateBranding, initial);
+
+  if (!canEdit) {
+    return (
+      <p className="flex items-start gap-2 rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-ink-soft">
+        <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+        Only the account owner can change what appears on your documents.
+      </p>
+    );
+  }
+
+  return (
+    <form action={action} className="flex flex-col gap-4">
+      <MarkUpload
+        name="logo"
+        label="Business logo"
+        hint="Printed top-left on every quotation, sales order, invoice and receipt, in place of the default mark."
+        currentUrl={logoUrl}
+        previewClass="max-h-14 max-w-[10rem] object-contain"
+      />
+
+      <MarkUpload
+        name="signature"
+        label="Authorised signature"
+        hint="Printed above the signatory's name at the foot of the document. Crop it tight and use a transparent PNG if you can."
+        currentUrl={signatureUrl}
+        previewClass="max-h-12 max-w-[10rem] object-contain"
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <TextInput
+          label="Signatory name"
+          name="signatory_name"
+          defaultValue={signatoryName ?? ""}
+          placeholder="e.g. Jane Wanjiru"
+          hint="Printed under the signature."
+        />
+        <TextInput
+          label="Signatory title"
+          name="signatory_title"
+          defaultValue={signatoryTitle ?? ""}
+          placeholder="e.g. Farm Manager"
+        />
+      </div>
+
+      <p className="flex items-start gap-2 rounded-lg border border-line bg-surface px-3 py-2.5 text-xs leading-relaxed text-ink-soft">
+        <PenLine className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        Your signature is stored privately and is only ever shown to people who
+        can already open your documents. Treat it the way you would a stamp:
+        anyone who can see an invoice can see the signature on it.
+      </p>
+
+      <Feedback state={state} />
+      <div>
+        <Button type="submit" disabled={pending}>
+          {pending ? "Saving…" : "Save branding"}
+        </Button>
+      </div>
     </form>
   );
 }
