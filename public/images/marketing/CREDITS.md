@@ -131,11 +131,19 @@ else's dressed chicken is a placeholder, and the honest fix is the farm
 uploading its own through `edoshatch360_products.photo_url`. The tile prefers
 that whenever it exists.
 
-## 4. Flock cards — `public/images/flocks/`
+## 4. Flock photographs — `public/images/flocks/` (held in reserve)
 
-Default photograph per bird type, used as the band across the top of a card
-on `/app/flocks`. All 720x300 (12:5), the shape of the band, cropped rather
-than squeezed — a full frame squashed into a band loses its subject.
+**Not referenced by any code.** These were built as a photo band across the
+top of the cards on `/app/flocks`; that band was removed at the client's
+request, and the cards now carry the batch number, the figures and a progress
+bar with no imagery at all.
+
+They are kept because they are already sourced, cropped, licence-checked and
+reviewed at full resolution — the expensive part — so a future slot that
+wants a picture per bird type can use them as they are. All 720x300 (12:5),
+cropped rather than squeezed, since a full frame squashed into a band loses
+its subject. Delete the folder and this section together if that slot never
+comes.
 
 | File | Source | Terms |
 |---|---|---|
@@ -148,10 +156,11 @@ than squeezed — a full frame squashed into a band loses its subject.
 | `breeder.jpg` | Crop of `farm/pullets-close.jpg` — the customer's own birds | **All rights reserved** |
 | `brooding.jpg` | Crop of `farm/brooder.jpg` — the customer's own brooder | **All rights reserved** |
 
-`brooding.jpg` is used for **any** flock under 21 days old or still marked
-brooding, whatever bird type it will grow into. A four-day-old layer batch is
-chicks, and putting a full-grown hen beside "day 4" would be a small lie on
-the first screen a farmer sees.
+`brooding.jpg` was intended for **any** flock under 21 days old or still
+marked brooding, whatever bird type it would grow into — a four-day-old layer
+batch is chicks, and putting a full-grown hen beside "day 4" would have been a
+small lie on the first screen a farmer sees. Worth keeping in mind if these
+are used again.
 
 `turkey.jpg` was cropped by hand rather than by salience: the attention
 cropper framed the bodies and cut the heads off, which is the one part of a
@@ -162,8 +171,8 @@ turkey anyone identifies it by.
 legible advertisement that survives the crop. It stays in reserve for a slot
 where the print falls outside the frame.
 
-There is no default for `other`, deliberately — the card falls back to the
-bird glyph rather than asserting a species nobody chose.
+There is no image for `other`, deliberately — nothing should assert a
+species nobody chose.
 
 ---
 
