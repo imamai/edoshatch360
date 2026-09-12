@@ -109,6 +109,12 @@ export default async function RecordPage({
   const tips = bestPractices(flock.bird_type, age);
   const lastSeven = recent.slice(0, 7);
 
+  // The most recent weighing before the day being recorded, so the form can
+  // say "down 12% since the last weighing" rather than just accepting it.
+  const previousWeight =
+    recent.find((r) => r.record_date < date && r.avg_weight_grams !== null)
+      ?.avg_weight_grams ?? null;
+
   return (
     <div className="mx-auto max-w-6xl">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -151,6 +157,7 @@ export default async function RecordPage({
           date={date}
           existing={existing}
           laysEggs={laysEggs(flock)}
+          previousWeight={previousWeight}
         />
 
         <aside className="flex flex-col gap-4">

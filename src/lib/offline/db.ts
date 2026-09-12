@@ -31,6 +31,12 @@ export interface QueuedRecord {
     notes: string | null;
   };
   status: "pending" | "syncing" | "failed";
+  /**
+   * Why this record could not be saved, in words worth showing. Only set on
+   * a failure the database will repeat — a network outage leaves it empty,
+   * because there is nothing wrong with the record itself.
+   */
+  message?: string;
   error?: string;
   attempts: number;
   createdAt: string;

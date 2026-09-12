@@ -4,7 +4,9 @@ import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from "react";
 import { createClient } from "@/lib/supabase/client";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { useOnlineStatus } from "@/lib/hooks/use-browser-state";
+import { describeWriteError } from "@/lib/data-quality";
 import {
   getQueuedRecords, offlineSupported, queueRecord, removeQueuedRecord,
   type QueuedRecord,
@@ -21,6 +23,19 @@ interface OfflineValue {
     record: Omit<QueuedRecord, "localId" | "status" | "attempts" | "createdAt">,
   ) => Promise<SubmitResult>;
   syncNow: () => Promise<void>;
+}
+
+/**
+ * Did the database refuse this record, or was it simply unreachable?
+ *
+ * The difference decides whether a record waits in the queue or comes back to
+ * the farmer. HB001 is raised by the validation triggers; the 23xxx family is
+ * Postgres rejecting a constraint. Anything else — a timeout, a dropped
+ * connection, a 502 — is worth retrying.
+ */
+function isRejection(error: { code?: string } | null): boolean {
+  const code = error?.code ?? "";
+  return code === "HB001" || code.startsWith("23") || code === "22P02";
 }
 
 const OfflineContext = createContext<OfflineValue | null>(null);
@@ -48,8 +63,14 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  /** Push one queued record to Postgres. Resolves true when it lands. */
-  const push = useCallback(async (record: QueuedRecord): Promise<boolean> => {
+  /**
+   * Push one queued record to Postgres.
+   *
+   * Resolves to null when it lands, and to the error when it does not — the
+   * caller has to tell a refusal from an outage, because only one of the two
+   * is worth retrying.
+   */
+  const push = useCallback(async (record: QueuedRecord): Promise<PostgrestError | null> => {
     const supabase = createClient();
     const { error } = await supabase.from("edoshatch360_daily_records").upsert(
       {
@@ -62,7 +83,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // row rather than creating a duplicate.
       { onConflict: "flock_id,record_date" },
     );
-    return !error;
+    return error ?? null;
   }, []);
 
   const syncNow = useCallback(async () => {
@@ -73,9 +94,23 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     try {
       const items = await getQueuedRecords();
       for (const item of items) {
-        const ok = await push(item);
-        if (ok) await removeQueuedRecord(item.localId);
-        else await queueRecord({ ...item, status: "failed", attempts: item.attempts + 1 });
+        const error = await push(item);
+        if (!error) {
+          await removeQueuedRecord(item.localId);
+        } else if (isRejection(error)) {
+          // The database will refuse this every time — retrying it forever
+          // would keep a permanent "waiting to sync" badge on the phone for a
+          // record that can never land. It is marked failed and left for the
+          // farmer to correct rather than retried.
+          await queueRecord({
+            ...item,
+            status: "failed",
+            attempts: item.attempts + 1,
+            message: describeWriteError(error),
+          });
+        } else {
+          await queueRecord({ ...item, status: "pending", attempts: item.attempts + 1 });
+        }
       }
     } catch {
       // Leave everything queued; the next online event tries again.
@@ -99,10 +134,15 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // Try the network first while online — an immediate success is the
       // common case and keeps the queue empty.
       if (navigator.onLine) {
-        const ok = await push(entry);
-        if (ok) {
+        const error = await push(entry);
+        if (!error) {
           await refresh();
           return { ok: true, queued: false };
+        }
+        // Data the database refuses must never be queued: the farmer would be
+        // told it was saved and would find out days later that it was not.
+        if (isRejection(error)) {
+          return { ok: false, message: describeWriteError(error) };
         }
       }
 

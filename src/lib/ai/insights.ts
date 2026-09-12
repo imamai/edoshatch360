@@ -2,6 +2,7 @@ import type { DashboardData } from "@/lib/data/dashboard";
 import { computeKpis, daySeries, expenseBreakdown, moneySeries } from "@/lib/data/dashboard";
 import type { Flock, FlockMetrics } from "@/lib/database.types";
 import { addDays, formatMoney, formatNumber, formatPercent, today } from "@/lib/utils";
+import { LIMITS } from "@/lib/data-quality";
 
 /**
  * The farm analysis engine behind the Hatch360 Assistant.
@@ -395,6 +396,33 @@ export function analyseFarm(input: AnalysisInput): Insight[] {
     }
   }
 
+  /* ------------------------------------------- records worth doubting -- */
+
+  // Everything above asks what the farm is doing. This asks whether the
+  // figures can be trusted at all — a conclusion drawn from a mistyped record
+  // is worse than no conclusion, because it looks like a finding.
+  //
+  // Only records already saved are examined. The entry form blocks the
+  // impossible and warns about the unusual, but records predate that form,
+  // arrive from the offline queue, or were simply saved anyway.
+  const suspect = findSuspectRecords(input);
+  if (suspect.length > 0) {
+    const worst = suspect.slice(0, 4);
+    out.push({
+      id: "data-quality",
+      tone: "watch",
+      title:
+        suspect.length === 1
+          ? "One record does not look right"
+          : `${suspect.length} records do not look right`,
+      body:
+        "These are figures the farm probably did not have. Worth correcting, because every average on this page is computed from them — a single mistyped day can move a month's feed cost.",
+      evidence: worst.map((r) => ({ label: r.label, value: r.value })),
+      action: "Open the day and correct it",
+      href: "/app/production",
+    });
+  }
+
   /* ------------------------------------------------ nothing to report -- */
 
   if (out.length === 0) {
@@ -412,4 +440,98 @@ export function analyseFarm(input: AnalysisInput): Insight[] {
 
   const order: Record<InsightTone, number> = { urgent: 0, watch: 1, neutral: 2, good: 3 };
   return out.sort((a, b) => order[a.tone] - order[b.tone]);
+}
+
+/* ----------------------------------------------------- data quality -- */
+
+interface SuspectRecord {
+  label: string;
+  value: string;
+}
+
+/**
+ * Saved records whose numbers do not hold together.
+ *
+ * Deliberately conservative: each test is something that is either arithmetic
+ * nonsense or so far outside normal husbandry that a typo is the likeliest
+ * explanation. Anything merely poor — high mortality, a bad lay rate — is a
+ * farming finding and is reported by the checks above, not here.
+ */
+function findSuspectRecords(input: AnalysisInput): SuspectRecord[] {
+  const { data, metrics } = input;
+  const out: SuspectRecord[] = [];
+  const flockById = new Map(metrics.map((m) => [m.flock.id, m.flock]));
+
+  // Weighings that go backwards, per flock, need the series in date order.
+  const lastWeight = new Map<string, { date: string; grams: number }>();
+  const ordered = [...data.records].sort((a, b) => a.record_date.localeCompare(b.record_date));
+
+  for (const r of ordered) {
+    const flock = flockById.get(r.flock_id);
+    if (!flock) continue;
+    const where = `${flock.code} · ${r.record_date}`;
+
+    const birds = flock.current_count;
+
+    if (r.record_date < flock.placement_date) {
+      out.push({ label: where, value: "dated before the birds arrived" });
+    }
+
+    if (r.record_date > today()) {
+      out.push({ label: where, value: "dated in the future" });
+    }
+
+    const collected = r.eggs_collected ?? 0;
+    if (collected > 0 && birds > 0 && collected > birds) {
+      out.push({
+        label: where,
+        value: `${formatNumber(collected)} eggs from ${formatNumber(birds)} birds`,
+      });
+    }
+
+    if ((r.eggs_broken ?? 0) + (r.eggs_rejected ?? 0) > collected && collected > 0) {
+      out.push({ label: where, value: "more broken and rejected eggs than were collected" });
+    }
+
+    if (r.feed_consumed_kg !== null && birds > 0) {
+      const perBird = Number(r.feed_consumed_kg) / birds;
+      if (perBird > LIMITS.feedKgPerBirdHigh) {
+        out.push({
+          label: where,
+          value: `${perBird.toFixed(2)} kg of feed per bird in a day`,
+        });
+      }
+    }
+
+    if (r.water_consumed_liters !== null && birds > 0) {
+      const perBird = Number(r.water_consumed_liters) / birds;
+      if (perBird > LIMITS.waterLPerBirdHigh) {
+        out.push({
+          label: where,
+          value: `${perBird.toFixed(2)} litres of water per bird in a day`,
+        });
+      }
+    }
+
+    if (r.avg_weight_grams !== null) {
+      const grams = Number(r.avg_weight_grams);
+      const prev = lastWeight.get(r.flock_id);
+      if (grams > LIMITS.weightGramsMax) {
+        out.push({ label: where, value: `average bird weight of ${formatNumber(grams)} g` });
+      } else if (prev && prev.grams > 0) {
+        const drop = ((prev.grams - grams) / prev.grams) * 100;
+        if (drop > LIMITS.weightDropPctWarn) {
+          out.push({
+            label: where,
+            value: `weight down ${drop.toFixed(0)}% since ${prev.date}`,
+          });
+        }
+      }
+      if (grams > 0 && grams <= LIMITS.weightGramsMax) {
+        lastWeight.set(r.flock_id, { date: r.record_date, grams });
+      }
+    }
+  }
+
+  return out;
 }

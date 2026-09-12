@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CheckCircle2, ChevronDown, CloudOff, Egg, Scale, Skull, Wheat,
+  AlertTriangle, CheckCircle2, ChevronDown, CloudOff, Egg, Scale, Skull, TriangleAlert, Wheat,
 } from "lucide-react";
 
 import { useOffline } from "./offline-provider";
@@ -11,8 +11,11 @@ import { useStoredJson } from "@/lib/hooks/use-browser-state";
 import { Button } from "@/components/ui/button";
 import { NumberInput, TextArea } from "@/components/ui/field";
 import { Card } from "@/components/ui/card";
+import {
+  checkDailyRecord, hasErrors, type DataIssue,
+} from "@/lib/data-quality";
 import type { DailyRecord, Flock } from "@/lib/database.types";
-import { cn, formatNumber } from "@/lib/utils";
+import { cn, today } from "@/lib/utils";
 
 interface SectionDef {
   key: "losses" | "eggs" | "feed" | "weight" | "notes";
@@ -50,12 +53,15 @@ export function RecordForm({
   date,
   existing,
   laysEggs,
+  previousWeight = null,
 }: {
   tenantId: string;
   flock: Flock;
   date: string;
   existing: DailyRecord | null;
   laysEggs: boolean;
+  /** Last recorded average weight before this date, for a drop check. */
+  previousWeight?: number | null;
 }) {
   const router = useRouter();
   const { submitRecord, online } = useOffline();
@@ -64,6 +70,14 @@ export function RecordForm({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ queued: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Everything the entry rules object to, errors first. */
+  const [issues, setIssues] = useState<DataIssue[]>([]);
+  /**
+   * Set once warnings have been shown. A warning is unusual, not impossible,
+   * so the second press means "yes, that really is what I measured" — the
+   * farm having a bad day is exactly what these records are for.
+   */
+  const [acknowledged, setAcknowledged] = useState(false);
 
   // Which optional sections this user wants to see. The defaults come from
   // the bird type; a saved preference overrides them. Read through
@@ -96,16 +110,48 @@ export function RecordForm({
     const mortality = num(form, "mortality");
     const culls = num(form, "culls");
     const birdsSold = num(form, "birds_sold");
+    const eggsCollected = visible.eggs ? nullableNum(form, "eggs_collected") : null;
+    const eggsBroken = visible.eggs ? nullableNum(form, "eggs_broken") : null;
+    const eggsRejected = visible.eggs ? nullableNum(form, "eggs_rejected") : null;
+    const feedKg = visible.feed ? nullableNum(form, "feed_consumed_kg") : null;
+    const waterLitres = visible.feed ? nullableNum(form, "water_consumed_liters") : null;
+    const weightGrams = visible.weight ? nullableNum(form, "avg_weight_grams") : null;
 
-    // The flock cannot lose more birds than it has. Catching it here gives a
-    // sentence the farmer can act on instead of a constraint violation.
-    if (mortality + culls + birdsSold > flock.current_count + (existing
-      ? existing.mortality + existing.culls + existing.birds_sold
-      : 0)) {
+    // The same rules the database enforces, run here so the farmer gets a
+    // sentence they can act on instead of a rejection after the fact — and so
+    // the merely unusual can be explained rather than refused.
+    const found = checkDailyRecord(
+      {
+        recordDate: date,
+        mortality, culls, birdsSold,
+        eggsCollected, eggsBroken, eggsRejected,
+        feedKg, waterLitres, weightGrams,
+      },
+      {
+        code: flock.code,
+        birdType: flock.bird_type,
+        placementDate: flock.placement_date,
+        placementCount: flock.placement_count,
+        currentCount: flock.current_count,
+        alreadyRecordedToday: existing
+          ? existing.mortality + existing.culls + existing.birds_sold
+          : 0,
+        previousWeightGrams: previousWeight,
+      },
+      today(),
+    );
+
+    setIssues(found);
+
+    // Impossible data never saves. Unusual data saves on the second press.
+    if (hasErrors(found)) {
       setBusy(false);
-      setError(
-        `That is more birds than the flock has. ${flock.code} currently has ${formatNumber(flock.current_count)} live birds.`,
-      );
+      setAcknowledged(false);
+      return;
+    }
+    if (found.length > 0 && !acknowledged) {
+      setBusy(false);
+      setAcknowledged(true);
       return;
     }
 
@@ -118,12 +164,12 @@ export function RecordForm({
         mortality,
         culls,
         birds_sold: birdsSold,
-        eggs_collected: visible.eggs ? nullableNum(form, "eggs_collected") : null,
-        eggs_broken: visible.eggs ? nullableNum(form, "eggs_broken") : null,
-        eggs_rejected: visible.eggs ? nullableNum(form, "eggs_rejected") : null,
-        feed_consumed_kg: visible.feed ? nullableNum(form, "feed_consumed_kg") : null,
-        water_consumed_liters: visible.feed ? nullableNum(form, "water_consumed_liters") : null,
-        avg_weight_grams: visible.weight ? nullableNum(form, "avg_weight_grams") : null,
+        eggs_collected: eggsCollected,
+        eggs_broken: eggsBroken,
+        eggs_rejected: eggsRejected,
+        feed_consumed_kg: feedKg,
+        water_consumed_liters: waterLitres,
+        avg_weight_grams: weightGrams,
         notes: String(form.get("notes") ?? "").trim() || null,
       },
     });
@@ -346,6 +392,57 @@ export function RecordForm({
         </p>
       )}
 
+      {/* Every objection carries its reason. "That is more eggs than birds"
+          on its own reads as the form being difficult; the sentence after it
+          is what lets someone find the mistake — usually trays entered as
+          eggs, or a figure belonging to the other house. */}
+      {issues.length > 0 && (
+        <div role="alert" className="flex flex-col gap-2">
+          {issues.map((issue, i) => {
+            const bad = issue.level === "error";
+            const Icon = bad ? TriangleAlert : AlertTriangle;
+            return (
+              <div
+                key={`${issue.field ?? "form"}-${i}`}
+                className={cn(
+                  "flex gap-2.5 rounded-lg border px-3 py-2.5",
+                  bad
+                    ? "border-critical/25 bg-critical-soft"
+                    : "border-attention/30 bg-attention-soft",
+                )}
+              >
+                <Icon
+                  className={cn(
+                    "mt-0.5 h-4 w-4 shrink-0",
+                    bad ? "text-critical" : "text-attention",
+                  )}
+                  aria-hidden="true"
+                />
+                <div className="min-w-0">
+                  <p
+                    className={cn(
+                      "text-sm font-semibold",
+                      bad ? "text-critical" : "text-attention",
+                    )}
+                  >
+                    {issue.message}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">{issue.why}</p>
+                </div>
+              </div>
+            );
+          })}
+
+          {!hasErrors(issues) && acknowledged && (
+            <p className="text-xs leading-relaxed text-ink-soft">
+              Nothing here is impossible, so you can save it as it is — press
+              the button again. If the farm really had a day like this, the
+              record should say so.
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="sticky bottom-20 z-10 flex flex-col gap-2 rounded-xl border border-line bg-surface/95 p-3 shadow-raised backdrop-blur-sm md:bottom-4 md:flex-row md:items-center md:justify-between">
         <p className="text-xs text-ink-faint">
           {existing
@@ -355,7 +452,13 @@ export function RecordForm({
               : "You're offline — this will be kept on your phone and synced later."}
         </p>
         <Button type="submit" size="lg" busy={busy} className="w-full md:w-auto">
-          {busy ? "Saving" : existing ? "Update record" : "Save record"}
+          {busy
+            ? "Saving"
+            : !hasErrors(issues) && acknowledged && issues.length > 0
+              ? "Save it anyway"
+              : existing
+                ? "Update record"
+                : "Save record"}
         </Button>
       </div>
     </form>
