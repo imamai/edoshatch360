@@ -551,11 +551,24 @@ export function Counter({
         )}
 
         {visible.length === 0 ? (
-          <p className="mt-10 text-center text-sm text-ink-soft">
-            {products.length === 0
-              ? "This farm has no products yet."
-              : "Nothing matches that search."}
-          </p>
+          products.length === 0 ? (
+            // A till with no tiles is a dead end unless it says where the
+            // catalogue is kept.
+            <div className="mt-10 text-center">
+              <p className="text-sm text-ink-soft">This farm has no products yet.</p>
+              <Link
+                href="/app/products"
+                className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:underline"
+              >
+                <Plus className="h-4 w-4" />
+                Add what you sell
+              </Link>
+            </div>
+          ) : (
+            <p className="mt-10 text-center text-sm text-ink-soft">
+              Nothing matches that search.
+            </p>
+          )
         ) : (
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">
             {visible.map((p) => (

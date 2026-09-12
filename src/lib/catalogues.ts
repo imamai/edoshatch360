@@ -1,4 +1,4 @@
-import type { BirdType, InventoryCategory } from "@/lib/database.types";
+import type { BirdType, InventoryCategory, ProductCategory } from "@/lib/database.types";
 
 /**
  * Pick-lists for the things farmers were previously typing by hand.
@@ -188,6 +188,38 @@ export const UNITS = [
   { value: "tray", label: "Tray" },
   { value: "piece", label: "Piece" },
   { value: "bale", label: "Bale" },
+];
+
+/* -------------------------------------------------------------- products -- */
+
+/** What a farm sells, as offered on the Products screen and the Counter. */
+export const PRODUCT_CATEGORIES: { value: ProductCategory; label: string }[] = [
+  { value: "eggs", label: "Eggs" },
+  { value: "live_birds", label: "Live birds" },
+  { value: "processed_birds", label: "Dressed / processed birds" },
+  { value: "spent_layers", label: "Spent layers" },
+  { value: "chicks", label: "Chicks" },
+  { value: "manure", label: "Manure" },
+  { value: "feed", label: "Feed" },
+  { value: "other", label: "Something else" },
+];
+
+/**
+ * How produce is sold, which is not how stock is bought — a farm sells eggs
+ * by the tray and birds by the bird, never by the 50 kg bag. Kept separate
+ * from UNITS for that reason.
+ */
+export const PRODUCT_UNITS = [
+  { value: "tray", label: "Tray" },
+  { value: "crate", label: "Crate" },
+  { value: "dozen", label: "Dozen" },
+  { value: "egg", label: "Egg" },
+  { value: "bird", label: "Bird" },
+  { value: "chick", label: "Chick" },
+  { value: "kg", label: "Kilogram (kg)" },
+  { value: "bag", label: "Bag" },
+  { value: "litre", label: "Litre" },
+  { value: "piece", label: "Piece" },
 ];
 
 /* ------------------------------------------------------------- breeds -- */

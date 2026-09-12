@@ -1,7 +1,7 @@
 import {
   BarChart3, Bird, Boxes, ClipboardList, Coins, Egg, FileText,
   Home, LayoutGrid, MapPin, Receipt, Settings,
-  Sparkles, Syringe, Users, Wheat,
+  Sparkles, Syringe, Tags, Users, Wheat,
 } from "lucide-react";
 import type { FarmMode, Role } from "@/lib/database.types";
 
@@ -65,6 +65,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // are reached from buttons and filter chips on the page itself, which
       // keeps one list of documents rather than five entries pointing at it.
       { href: "/app/sales", label: "Sales", icon: Receipt, roles: MONEY },
+      { href: "/app/products", label: "Products", icon: Tags, roles: MONEY },
       { href: "/app/customers", label: "Customers", icon: Users, roles: MONEY, advancedOnly: true },
       { href: "/app/finance", label: "Finance", icon: Coins, roles: MONEY },
     ],
