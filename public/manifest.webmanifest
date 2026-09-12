@@ -1,0 +1,42 @@
+{
+  "name": "EDOS Hatch360 — Poultry farm management",
+  "short_name": "Hatch360",
+  "description": "Flock, production, health, feed, sales and profit for your poultry farm. Works offline.",
+  "id": "/app",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbfaf6",
+  "theme_color": "#1b5e42",
+  "lang": "en-KE",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Record today",
+      "short_name": "Record",
+      "description": "Enter today's deaths, eggs and feed",
+      "url": "/app/record"
+    },
+    {
+      "name": "New sale",
+      "short_name": "Sell",
+      "description": "Create a receipt or invoice",
+      "url": "/app/sales/new"
+    }
+  ]
+}

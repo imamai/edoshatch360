@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>You're offline · EDOS Hatch360</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: #fbfaf6;
+        color: #161a17;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .card {
+        max-width: 26rem;
+        width: 100%;
+        background: #fff;
+        border: 1px solid #e7e4da;
+        border-radius: 16px;
+        padding: 32px 24px;
+        text-align: center;
+        box-shadow: 0 1px 2px rgb(22 26 23 / 0.04), 0 1px 3px rgb(22 26 23 / 0.06);
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: #fef3e2;
+        color: #b45309;
+        margin-bottom: 16px;
+      }
+      h1 { margin: 0 0 8px; font-size: 1.25rem; letter-spacing: -0.02em; }
+      p { margin: 0 0 8px; font-size: 0.9375rem; line-height: 1.6; color: #5a635c; }
+      .note {
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid #e7e4da;
+        font-size: 0.8125rem;
+        color: #8f978f;
+      }
+      button {
+        margin-top: 20px;
+        height: 44px;
+        padding: 0 20px;
+        border: 0;
+        border-radius: 8px;
+        background: #1b5e42;
+        color: #fff;
+        font-size: 0.9375rem;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      button:hover { background: #14472f; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <span class="chip" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m2 2 20 20" />
+          <path d="M8.5 16.5a5 5 0 0 1 7 0" />
+          <path d="M2 8.82a15 15 0 0 1 4.17-2.65" />
+          <path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76" />
+          <path d="M16.85 11.25a10 10 0 0 1 2.22 1.68" />
+          <path d="M5 13a10 10 0 0 1 5.24-2.76" />
+          <line x1="12" y1="20" x2="12.01" y2="20" />
+        </svg>
+      </span>
+
+      <h1>You're offline</h1>
+      <p>
+        This page needs a connection to load. Once you have signal again it will open
+        normally.
+      </p>
+
+      <p class="note">
+        Anything you already recorded is safe on this device and will sync by itself the
+        moment you are back online. You don't need to enter it again.
+      </p>
+
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>
