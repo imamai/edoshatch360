@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -1087,9 +1088,18 @@ export function Counter({
       </aside>
 
       {/* ------------------------------------------------------ preview -- */}
-      {issued && model && (
+      {/* Rendered into <body> rather than in place.
+
+          Printing is the reason. The document has to be the only thing on the
+          printed page, and the previous approach hid the Counter behind
+          `visibility: hidden` — which leaves the hidden content occupying its
+          full height, so the receipt was pushed onto page three behind two
+          blank ones. As a direct child of body the sheet can be isolated by
+          hiding body's other children outright, which takes them out of the
+          layout instead of merely making them invisible. */}
+      {issued && model && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-brand-darker/50 p-3 sm:p-6"
+          className="print-portal fixed inset-0 z-50 flex items-center justify-center bg-brand-darker/50 p-3 sm:p-6"
           role="dialog"
           aria-modal="true"
           aria-labelledby="counter-preview-title"
@@ -1154,7 +1164,8 @@ export function Counter({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

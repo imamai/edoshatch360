@@ -120,7 +120,10 @@ export default async function SaleDetailPage({
       </div>
 
       {/* ------------------------------------------------- the document -- */}
-      <Card className="mt-4 print:border-0 print:shadow-none">
+      {/* print-sheet is what the print stylesheet tightens. Shared with the
+          Counter's preview so a document prints identically whichever screen
+          it was reached from. */}
+      <Card className="print-sheet mt-4 print:border-0 print:shadow-none">
         <CardBody className="sm:p-8">
           <SaleDocument
             model={model}

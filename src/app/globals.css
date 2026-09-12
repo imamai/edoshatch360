@@ -299,6 +299,286 @@ h1, h2, h3, h4 {
   body { background: #fff; }
 }
 
+/* Printing a sale document.
+ *
+ * Two paths reach a printer: the standalone document page, and the Counter's
+ * preview, which is portalled to <body> and carries .print-portal.
+ *
+ * The preview used to hide the till with `visibility: hidden`. That makes it
+ * invisible but leaves it occupying its full height, so a receipt printed as
+ * two blank pages followed by the document. Hiding body's other children with
+ * `display: none` removes them from the layout instead, which is the whole
+ * reason the preview is portalled up to body in the first place.
+ */
+@media print {
+  body:has(.print-portal) > *:not(.print-portal) { display: none !important; }
+
+  /* The dialog chrome: a fixed backdrop, a panel capped at the viewport and a
+     scrolling body. All three have to stop constraining the sheet, or it is
+     clipped to one screenful. No `display` here — the header and footer are
+     already display:none from print:hidden, and overriding that would bring
+     them back as invisible boxes taking up space. */
+  .print-portal,
+  .print-portal > *,
+  .print-portal > * > * {
+    position: static !important;
+    max-width: none !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    flex: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .print-sheet {
+    position: static !important;
+    margin: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    padding: 0 !important;
+  }
+}
+
+/* The printed sheet itself.
+ *
+ * A document is read on paper at arm's length, not on a screen at 1400px, so
+ * it is set tighter here than on screen: a farm's ordinary sale — a handful of
+ * lines — should land on one page rather than spilling a signature block onto
+ * a second. Where a sale genuinely runs long, the rules below keep it legible
+ * across pages rather than merely smaller.
+ */
+@page {
+  size: A4;
+  margin: 11mm 12mm 10mm;
+}
+
+@media print {
+  html, body { background: #fff !important; }
+
+  .print-sheet {
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+
+  /* Column headings repeat at the top of every page of a long document —
+     otherwise page two is a wall of unlabelled numbers. */
+  .print-sheet thead { display: table-header-group; }
+  .print-sheet tfoot { display: table-footer-group; }
+
+  /* Nothing that reads as one thing may be split down the middle. */
+  .print-sheet tr,
+  .print-sheet dl,
+  .print-sheet img { break-inside: avoid; }
+
+  /* The totals and the signature belong with the last line of the table, not
+     stranded alone on a page of their own. */
+  .print-sheet table + div,
+  .print-sheet dl { break-before: avoid; }
+
+  .print-sheet table { min-width: 0 !important; }
+  /* The standalone page wraps the document in a padded Card. On paper that
+     padding is a second margin inside the page margin. */
+  .print-sheet > div { padding: 0 !important; }
+  .print-sheet td, .print-sheet th { padding-block: 5px !important; }
+
+  /* Vertical rhythm compresses; the horizontal measure is unchanged. */
+  .print-sheet .mt-8 { margin-top: 1.25rem !important; }
+  .print-sheet .mt-7 { margin-top: 1rem !important; }
+  .print-sheet .mt-6 { margin-top: 0.85rem !important; }
+  .print-sheet .mt-5 { margin-top: 0.7rem !important; }
+
+  .print-sheet h1, .print-sheet h2, .print-sheet p { orphans: 2; widows: 2; }
+}
+
+/* Empty states read as a place something will go, the way a dropzone does.
+   Left unscoped so the class works wherever an empty state is rendered. */
+.empty-frame {
+  border: 1px dashed var(--color-line-strong);
+  border-radius: var(--radius-lg);
+  background: transparent;
+}
+
+/* Figures that line up in columns must line up in columns. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Visible keyboard focus everywhere (spec §59). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-mid);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+::selection {
+  background: var(--color-brand-soft);
+  color: var(--color-brand-dark);
+}
+
+/* Thin, unobtrusive scrollbars in scrolling panels. */
+.scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    /* Delays must go too: a staggered entrance with `animation-fill-mode:
+       both` starts at opacity 0, so zeroing only the duration would leave
+       text invisible for the length of its delay. */
+    animation-delay: 0ms !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Marketing surface
+ * A darker, higher-contrast treatment used only on the public pages,
+ * scoped under .mk so the working application keeps its calm, legible
+ * daylight palette.
+ * ------------------------------------------------------------------ */
+
+.mk-dark {
+  background:
+    radial-gradient(120% 130% at 12% -15%, #226d4d 0%, #14472f 42%, #0f2a21 78%);
+  color: #f4f6f3;
+  isolation: isolate;
+}
+
+.mk-glass {
+  background: rgb(255 255 255 / 0.08);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.mk-grid-lines {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.05) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+.mk-lift {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.mk-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-pop);
+}
+
+@keyframes hatch-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Sections animate in FROM a visible resting state — the page is fully
+   readable at rest, never parked at opacity 0 waiting on a scroll. */
+.rise {
+  animation: hatch-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Very slow drift across the hero photograph: enough to feel alive, far too
+   slow to pull the eye away from the headline. Disabled entirely under
+   prefers-reduced-motion by the global rule above. */
+/* Scale only: the track owns horizontal movement, so the photographs
+   themselves just breathe very slowly in place. */
+@keyframes hero-drift {
+  from { transform: scale(1.04); }
+  to   { transform: scale(1.12); }
+}
+
+.hero-drift {
+  animation: hero-drift 14s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* Hero slideshow — a horizontal carousel.
+ *
+ * The track holds four panels for three photographs: the first image is
+ * repeated at the end, so when the animation loops from -75% back to 0 it
+ * cuts between two copies of the same picture and the rewind is invisible.
+ * Each photograph rests for about six seconds and takes just under one to
+ * travel, which reads as a deliberate pan rather than a slideshow.
+ */
+@keyframes hero-slide {
+  0%,   22%  { transform: translateX(0); }
+  25%,  47%  { transform: translateX(-25%); }
+  50%,  72%  { transform: translateX(-50%); }
+  75%, 100%  { transform: translateX(-75%); }
+}
+
+.hero-track {
+  width: 400%;
+  animation: hero-slide 28s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  will-change: transform;
+}
+
+/* Headline words rise in one after another. The delay is set per word
+   inline; this only carries the motion. */
+@keyframes word-rise {
+  from { opacity: 0; transform: translateY(0.55em); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.word-rise {
+  display: inline-block;
+  animation: word-rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes hatch-spin {
+  to { transform: rotate(360deg); }
+}
+.spin {
+  animation: hatch-spin 0.7s linear infinite;
+}
+
+@keyframes hatch-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+.pulse-soft {
+  animation: hatch-pulse 1.6s ease-in-out infinite;
+}
+
+/* Skeleton shimmer for loading lists and cards. */
+@keyframes hatch-shimmer {
+  100% { transform: translateX(100%); }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-surface-sunk);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.6), transparent);
+  animation: hatch-shimmer 1.4s infinite;
+}
+
+@media print {
+  .print\:hidden { display: none !important; }
+  body { background: #fff; }
+}
+
 /* Printing a document that is showing inside a modal.
  *
  * The Counter issues a sale and then shows the document over the till. Asking
