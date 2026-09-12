@@ -108,7 +108,19 @@ export function FlockCard({
       className="group flex h-full flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-card transition-all hover:border-brand/40 hover:shadow-raised focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       {/* ------------------------------------------------------- picture -- */}
-      <div className="relative aspect-[12/5] w-full overflow-hidden bg-surface-sunk">
+      {/* The ratio is an inline style, not an `aspect-[12/5]` utility, and
+          deliberately so: everything in this band is absolutely positioned, so
+          the band's own height is the only thing giving it size. If that came
+          from a class and the class were missing for any reason — a stale
+          stylesheet in an open tab, a purge that did not see this file — the
+          band would collapse to zero and take the photograph, the code and the
+          status badge down with it, silently, while the rest of the card
+          carried on looking fine. An inline style ships with the markup and
+          cannot go missing. */}
+      <div
+        style={{ aspectRatio: "12 / 5" }}
+        className="relative w-full overflow-hidden bg-surface-sunk"
+      >
         {photo ? (
           /* eslint-disable-next-line @next/next/no-img-element --
              a fixed, shipped asset rather than a signed URL; next/image would
