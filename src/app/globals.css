@@ -309,6 +309,19 @@ h1, h2, h3, h4 {
  * would take the sheet down with them, since it lives inside them.
  * The rules are scoped to `:has(.print-sheet)` so no other page is affected —
  * the standalone document page keeps printing exactly as it did.
+ *
+ * The sheet must stay in normal flow. It was `position: fixed; inset: 0`
+ * here, which printed the receipt TWICE: a fixed box is painted again on
+ * every printed page, and pinning it to one viewport height is what pushed a
+ * long receipt onto a second page to begin with. In flow it simply paginates,
+ * so two pages means two pages of receipt rather than two receipts.
+ *
+ * Its ancestors are the reason it cannot be left alone: a fixed backdrop, a
+ * panel capped at the viewport height, and a scrolling body between them.
+ * Each has to stop constraining the sheet or it is clipped to one screenful.
+ * Deliberately no `display` in that rule — the header and footer are already
+ * `display: none` from print:hidden, and overriding it would restore them as
+ * invisible-but-occupying boxes, which is its own way to get a blank page.
  */
 @media print {
   body:has(.print-sheet) * {
@@ -320,9 +333,25 @@ h1, h2, h3, h4 {
     visibility: visible;
   }
 
+  body:has(.print-sheet) [role="dialog"],
+  body:has(.print-sheet) [role="dialog"] > *,
+  body:has(.print-sheet) [role="dialog"] > * > * {
+    position: static !important;
+    max-width: none !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    flex: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
   body:has(.print-sheet) .print-sheet {
-    position: fixed;
-    inset: 0;
+    position: static;
     margin: 0;
     max-height: none;
     overflow: visible;
