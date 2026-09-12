@@ -86,7 +86,17 @@ export default async function SaleDetailPage({
       <Card className="mt-4 print:border-0 print:shadow-none">
         <CardBody className="sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
+            {/* An uploaded logo is usually a wide lockup, so it gets the full
+                left column and the business details sit beneath it. The
+                default mark is a small square, which reads better beside the
+                name than stacked above it. */}
+            <div
+              className={
+                branding.logoUrl
+                  ? "flex max-w-[22rem] flex-col items-start gap-3"
+                  : "flex items-start gap-3"
+              }
+            >
               {branding.logoUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element --
                    a short-lived signed URL; next/image would cache a URL that
@@ -94,13 +104,15 @@ export default async function SaleDetailPage({
                 <img
                   src={branding.logoUrl}
                   alt={`${tenant.name} logo`}
-                  className="h-12 max-w-[9rem] object-contain object-left"
+                  className="max-h-20 w-auto max-w-[15rem] object-contain object-left"
                 />
               ) : (
                 <LogoMark className="h-9 w-9 text-brand" />
               )}
               <div>
-                <p className="font-display text-lg font-extrabold text-ink">{tenant.name}</p>
+                {/* Same colour as the document title, so the two things a
+                    customer reads first are visibly a pair. */}
+                <p className="font-display text-lg font-extrabold text-brand">{tenant.name}</p>
                 <div className="mt-0.5 text-xs leading-relaxed text-ink-soft">
                   {tenant.address && <p>{tenant.address}</p>}
                   {tenant.phone && <p>{tenant.phone}</p>}
@@ -158,24 +170,28 @@ export default async function SaleDetailPage({
           <div className="mt-6 overflow-x-auto">
             <table className="w-full min-w-[32rem] text-sm">
               <thead>
-                <tr className="border-y border-line text-left text-xs text-ink-faint">
-                  <th scope="col" className="py-2.5 pr-3 font-medium">Description</th>
-                  <th scope="col" className="px-3 py-2.5 text-right font-medium">Qty</th>
-                  <th scope="col" className="px-3 py-2.5 text-right font-medium">Unit price</th>
-                  <th scope="col" className="py-2.5 pl-3 text-right font-medium">Amount</th>
+                {/* The column band carries the brand tint. print-color-adjust
+                    is load-bearing: browsers drop background colours when
+                    printing, and a printed invoice is exactly where this is
+                    meant to be seen. */}
+                <tr className="border-y border-line bg-brand-soft text-left text-xs text-brand-dark [-webkit-print-color-adjust:exact] [print-color-adjust:exact]">
+                  <th scope="col" className="py-2.5 pr-3 pl-3 font-semibold">Description</th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-semibold">Qty</th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-semibold">Unit price</th>
+                  <th scope="col" className="py-2.5 pr-3 pl-3 text-right font-semibold">Amount</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {items.map((item) => (
                   <tr key={item.id}>
-                    <td className="py-3 pr-3 text-ink">{item.description}</td>
+                    <td className="py-3 pr-3 pl-3 text-ink">{item.description}</td>
                     <td className="px-3 py-3 text-right text-ink-soft tnum">
                       {formatNumber(Number(item.quantity), { decimals: 2 })}
                     </td>
                     <td className="px-3 py-3 text-right text-ink-soft tnum">
                       {formatMoney(item.unit_price_cents, { currency, decimals: true })}
                     </td>
-                    <td className="py-3 pl-3 text-right font-medium text-ink tnum">
+                    <td className="py-3 pr-3 pl-3 text-right font-medium text-ink tnum">
                       {formatMoney(item.line_total_cents, { currency, decimals: true })}
                     </td>
                   </tr>
