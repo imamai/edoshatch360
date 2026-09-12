@@ -8,6 +8,7 @@ import { Wordmark } from "@/components/brand/logo";
 import { activeHref, visibleGroups } from "@/lib/nav";
 import { useStoredJson } from "@/lib/hooks/use-browser-state";
 import type { FarmMode, Role } from "@/lib/database.types";
+import type { PlanCode } from "@/lib/plans";
 import { cn } from "@/lib/utils";
 
 const COLLAPSE_KEY = "hatch360:sidebar-collapsed";
@@ -20,13 +21,16 @@ export function Sidebar({
   role,
   mode,
   canWrite,
+  plan,
 }: {
   role: Role;
   mode: FarmMode;
   canWrite: boolean;
+  /** Null for an organisation with no subscription — nothing is hidden. */
+  plan: PlanCode | null;
 }) {
   const pathname = usePathname();
-  const groups = visibleGroups(role, mode, canWrite);
+  const groups = visibleGroups(role, mode, canWrite, plan);
   const active = activeHref(
     pathname,
     groups.flatMap((g) => g.items.map((i) => i.href)),

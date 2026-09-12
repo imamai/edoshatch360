@@ -4,6 +4,9 @@ import { AlertTriangle, Phone, Users, Wallet } from "lucide-react";
 
 import { CAN_SEE_MONEY, can, requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantPlan } from "@/lib/data/plan";
+import { featureFrom } from "@/lib/plans";
+import { UpgradeNotice } from "@/components/app/upgrade-notice";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
@@ -18,6 +21,12 @@ export const metadata: Metadata = { title: "Customers" };
 
 export default async function CustomersPage() {
   const session = await requireSession();
+  // Hidden in the navigation, but a URL still resolves — so the page
+  // itself has to know what the plan carries.
+  const plan = await getTenantPlan(session.tenant.id);
+  if (!plan.allows("invoicing")) {
+    return <UpgradeNotice what="Customers" from={featureFrom("invoicing")} />;
+  }
   if (!can(session.role, CAN_SEE_MONEY)) notFound();
 
   const supabase = await createClient();

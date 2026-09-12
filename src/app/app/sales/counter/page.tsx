@@ -5,6 +5,9 @@ import { CAN_SEE_MONEY, CAN_WRITE, can, requireSession } from "@/lib/data/sessio
 import { getBrandingWithUrls } from "@/lib/data/branding";
 import { getTaxSettings, vatLabel } from "@/lib/data/tax";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantPlan } from "@/lib/data/plan";
+import { featureFrom } from "@/lib/plans";
+import { UpgradeNotice } from "@/components/app/upgrade-notice";
 import { Counter } from "@/components/app/counter/counter";
 import { ReadOnlyNotice } from "@/components/app/read-only-notice";
 import type { SaleDocumentBusiness } from "@/components/app/sale-document";
@@ -14,6 +17,12 @@ export const metadata: Metadata = { title: "Counter" };
 
 export default async function CounterPage() {
   const session = await requireSession();
+  // Hidden in the navigation, but a URL still resolves — so the page
+  // itself has to know what the plan carries.
+  const plan = await getTenantPlan(session.tenant.id);
+  if (!plan.allows("invoicing")) {
+    return <UpgradeNotice what="The Counter" from={featureFrom("invoicing")} />;
+  }
   if (!can(session.role, CAN_SEE_MONEY)) notFound();
 
   // A read-only account is told why rather than shown a till it cannot use.

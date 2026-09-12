@@ -6,6 +6,9 @@ import {
 
 import { CAN_SEE_MONEY, can, requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantPlan } from "@/lib/data/plan";
+import { featureFrom } from "@/lib/plans";
+import { UpgradeNotice } from "@/components/app/upgrade-notice";
 import {
   computeKpis, daySeries, expenseBreakdown, flockComparison, flockComposition,
   getDashboardData, moneySeries,
@@ -37,6 +40,12 @@ export default async function AnalyticsPage({
   searchParams: Promise<{ range?: string }>;
 }) {
   const session = await requireSession();
+  // Hidden in the navigation, but a URL still resolves — so the page
+  // itself has to know what the plan carries.
+  const plan = await getTenantPlan(session.tenant.id);
+  if (!plan.allows("benchmarking")) {
+    return <UpgradeNotice what="Analytics" from={featureFrom("benchmarking")} />;
+  }
   const params = await searchParams;
   const range = RANGES.find((r) => String(r.days) === params.range)?.days ?? 30;
 

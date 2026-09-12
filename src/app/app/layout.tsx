@@ -1,4 +1,5 @@
 import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
+import { getTenantPlan } from "@/lib/data/plan";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/app/sidebar";
 import { Topbar } from "@/components/app/topbar";
@@ -12,6 +13,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const session = await requireSession();
+  const plan = await getTenantPlan(session.tenant.id);
   const canWrite = can(session.role, CAN_WRITE);
 
   const supabase = await createClient();
@@ -28,7 +30,7 @@ export default async function AppLayout({
       {/* .app-ui switches the working application onto its own typographic
           scale — see globals.css. The marketing site keeps its own. */}
       <div className="app-ui flex min-h-screen bg-canvas">
-        <Sidebar role={session.role} mode={session.mode} canWrite={canWrite} />
+        <Sidebar role={session.role} mode={session.mode} canWrite={canWrite} plan={plan.code} />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar

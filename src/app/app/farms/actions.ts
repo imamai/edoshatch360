@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantPlan, getTenantUsage } from "@/lib/data/plan";
+import { PLAN_LABEL, withinLimit } from "@/lib/plans";
 import { requireSession } from "@/lib/data/session";
 
 export interface FarmFormState {
@@ -18,6 +20,19 @@ export async function createFarm(
 
   const name = String(form.get("name") ?? "").trim();
   if (!name) return { error: "What is the farm called?", ok: null };
+
+  // The plan's own number, quoted back. A limit that says "upgrade" without
+  // saying what the limit is leaves someone guessing what they bought.
+  const [plan, usage] = await Promise.all([
+    getTenantPlan(session.tenant.id),
+    getTenantUsage(session.tenant.id),
+  ]);
+  if (!withinLimit(usage.farms, plan.limits.farms)) {
+    return {
+      error: `The ${PLAN_LABEL[plan.code!]} plan covers ${plan.limits.farms} farm${plan.limits.farms === 1 ? "" : "s"}, and you have ${usage.farms}. Moving up a plan adds more.`,
+      ok: null,
+    };
+  }
 
   const { error } = await supabase.from("edoshatch360_farms").insert({
     tenant_id: session.tenant.id,
@@ -46,6 +61,17 @@ export async function createHouse(
 
   if (!farmId) return { error: "Which farm is this house on?", ok: null };
   if (!name) return { error: "Give the house a name or number.", ok: null };
+
+  const [plan, usage] = await Promise.all([
+    getTenantPlan(session.tenant.id),
+    getTenantUsage(session.tenant.id),
+  ]);
+  if (!withinLimit(usage.houses, plan.limits.houses)) {
+    return {
+      error: `The ${PLAN_LABEL[plan.code!]} plan covers ${plan.limits.houses} houses, and you have ${usage.houses}. Moving up a plan adds more.`,
+      ok: null,
+    };
+  }
 
   const { error } = await supabase.from("edoshatch360_houses").insert({
     tenant_id: session.tenant.id,

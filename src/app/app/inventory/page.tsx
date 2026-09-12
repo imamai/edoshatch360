@@ -13,6 +13,9 @@ import { StockTable } from "@/components/app/stock-table";
 import { BreakdownDonut } from "@/components/charts/trend-charts";
 import { MovementForm, NewItemForm } from "./stock-forms";
 import { formatMoney, formatNumber, relativeDay } from "@/lib/utils";
+import { getTenantPlan } from "@/lib/data/plan";
+import { featureFrom } from "@/lib/plans";
+import { UpgradeNotice } from "@/components/app/upgrade-notice";
 
 export const metadata: Metadata = { title: "Inventory" };
 
@@ -27,6 +30,12 @@ const MOVEMENT_LABEL: Record<string, string> = {
 
 export default async function InventoryPage() {
   const session = await requireSession();
+  // Hidden in the navigation, but a URL still resolves — so the page
+  // itself has to know what the plan carries.
+  const plan = await getTenantPlan(session.tenant.id);
+  if (!plan.allows("inventory")) {
+    return <UpgradeNotice what="Inventory" from={featureFrom("inventory")} />;
+  }
 
   const [{ rows, items, movements }, flocks] = await Promise.all([
     getStock(session.tenant.id),

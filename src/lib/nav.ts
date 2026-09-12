@@ -4,6 +4,7 @@ import {
   Sparkles, Syringe, Tags, Users, Wheat,
 } from "lucide-react";
 import type { FarmMode, Role } from "@/lib/database.types";
+import { planAllows, type PlanCode, type PlanFeature } from "@/lib/plans";
 
 export interface NavItem {
   href: string;
@@ -15,6 +16,14 @@ export interface NavItem {
   advancedOnly?: boolean;
   /** Hidden for read-only accounts — the page only exists to record data. */
   writeOnly?: boolean;
+  /**
+   * Hidden unless the organisation's plan carries this capability.
+   *
+   * Separate from advancedOnly on purpose: that is a complexity preference a
+   * farm sets for itself, this is what it has paid for. An entry with neither
+   * is part of the product everyone gets.
+   */
+  feature?: PlanFeature;
 }
 
 export interface NavGroup {
@@ -47,7 +56,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/app/record", label: "Record data", icon: ClipboardList, writeOnly: true },
       { href: "/app/production", label: "Production", icon: Egg },
-      { href: "/app/health", label: "Health", icon: Syringe },
+      { href: "/app/health", label: "Health", icon: Syringe, feature: "vaccinations" },
       { href: "/app/tasks", label: "Tasks", icon: LayoutGrid },
     ],
   },
@@ -55,7 +64,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Stock",
     items: [
       { href: "/app/feed", label: "Feed", icon: Wheat },
-      { href: "/app/inventory", label: "Inventory", icon: Boxes, advancedOnly: true },
+      { href: "/app/inventory", label: "Inventory", icon: Boxes, advancedOnly: true, feature: "inventory" },
     ],
   },
   {
@@ -64,9 +73,9 @@ export const NAV_GROUPS: NavGroup[] = [
       // Sales is a single destination. The Counter and the per-document views
       // are reached from buttons and filter chips on the page itself, which
       // keeps one list of documents rather than five entries pointing at it.
-      { href: "/app/sales", label: "Sales", icon: Receipt, roles: MONEY },
-      { href: "/app/products", label: "Products", icon: Tags, roles: MONEY },
-      { href: "/app/customers", label: "Customers", icon: Users, roles: MONEY, advancedOnly: true },
+      { href: "/app/sales", label: "Sales", icon: Receipt, roles: MONEY, feature: "invoicing" },
+      { href: "/app/products", label: "Products", icon: Tags, roles: MONEY, feature: "invoicing" },
+      { href: "/app/customers", label: "Customers", icon: Users, roles: MONEY, advancedOnly: true, feature: "invoicing" },
       { href: "/app/finance", label: "Finance", icon: Coins, roles: MONEY },
     ],
   },
@@ -74,8 +83,8 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Insight",
     items: [
       { href: "/app/assistant", label: "Assistant", icon: Sparkles },
-      { href: "/app/reports", label: "Reports", icon: FileText, advancedOnly: true },
-      { href: "/app/analytics", label: "Analytics", icon: BarChart3, advancedOnly: true },
+      { href: "/app/reports", label: "Reports", icon: FileText, advancedOnly: true, feature: "reports_export" },
+      { href: "/app/analytics", label: "Analytics", icon: BarChart3, advancedOnly: true, feature: "benchmarking" },
     ],
   },
   {
@@ -93,11 +102,18 @@ export const MOBILE_NAV: NavItem[] = [
   { href: "/app/more", label: "More", icon: LayoutGrid },
 ];
 
-function allowed(item: NavItem, role: Role, mode: FarmMode, canWrite: boolean): boolean {
+function allowed(
+  item: NavItem,
+  role: Role,
+  mode: FarmMode,
+  canWrite: boolean,
+  plan: PlanCode | null,
+): boolean {
   return (
     (!item.roles || item.roles.includes(role)) &&
     (!item.advancedOnly || mode === "advanced") &&
-    (!item.writeOnly || canWrite)
+    (!item.writeOnly || canWrite) &&
+    (!item.feature || planAllows(plan, item.feature))
   );
 }
 
@@ -105,10 +121,11 @@ export function visibleGroups(
   role: Role,
   mode: FarmMode,
   canWrite = true,
+  plan: PlanCode | null = null,
 ): NavGroup[] {
   return NAV_GROUPS.map((group) => ({
     title: group.title,
-    items: group.items.filter((item) => allowed(item, role, mode, canWrite)),
+    items: group.items.filter((item) => allowed(item, role, mode, canWrite, plan)),
   })).filter((group) => group.items.length > 0);
 }
 

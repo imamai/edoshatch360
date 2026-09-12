@@ -9,6 +9,9 @@ import { computeKpis, getDashboardData } from "@/lib/data/dashboard";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { formatMoney, formatNumber, formatPercent } from "@/lib/utils";
+import { getTenantPlan } from "@/lib/data/plan";
+import { featureFrom } from "@/lib/plans";
+import { UpgradeNotice } from "@/components/app/upgrade-notice";
 
 export const metadata: Metadata = { title: "Reports" };
 
@@ -20,6 +23,12 @@ export default async function ReportsPage({
   searchParams: Promise<{ days?: string }>;
 }) {
   const session = await requireSession();
+  // Hidden in the navigation, but a URL still resolves — so the page
+  // itself has to know what the plan carries.
+  const plan = await getTenantPlan(session.tenant.id);
+  if (!plan.allows("reports_export")) {
+    return <UpgradeNotice what="Reports" from={featureFrom("reports_export")} />;
+  }
   const params = await searchParams;
   const days = PERIODS.includes(Number(params.days)) ? Number(params.days) : 90;
 

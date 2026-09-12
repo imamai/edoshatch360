@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { addDays, today } from "@/lib/utils";
 import { CYCLE_DAYS } from "@/lib/catalogues";
+import { getTenantPlan, getTenantUsage } from "@/lib/data/plan";
+import { PLAN_LABEL, withinLimit } from "@/lib/plans";
 import type { BirdType, EntryFrequency } from "@/lib/database.types";
 
 export interface FlockFormState {
@@ -55,6 +57,18 @@ export async function createFlock(
   }
   if (placementDate > today()) {
     return { error: "The placement date cannot be in the future." };
+  }
+
+  // Birds are counted live across running flocks, so closed batches never
+  // count against the allowance.
+  const [plan, usage] = await Promise.all([
+    getTenantPlan(session.tenant.id),
+    getTenantUsage(session.tenant.id),
+  ]);
+  if (!withinLimit(usage.birds, plan.limits.birds, Math.round(count))) {
+    return {
+      error: `The ${PLAN_LABEL[plan.code!]} plan covers ${plan.limits.birds!.toLocaleString()} birds. You have ${usage.birds.toLocaleString()} and this would place ${Math.round(count).toLocaleString()} more. Moving up a plan adds more.`,
+    };
   }
 
   // Batch code is generated, never typed: farm initials + breed + sequence,

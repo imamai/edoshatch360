@@ -3,6 +3,9 @@ import { AlertTriangle, CheckCircle2, Pill, Stethoscope, Syringe } from "lucide-
 
 import { requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantPlan } from "@/lib/data/plan";
+import { featureFrom } from "@/lib/plans";
+import { UpgradeNotice } from "@/components/app/upgrade-notice";
 import { getFlocks } from "@/lib/data/flocks";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -28,6 +31,12 @@ const SEVERITY_TONE = {
 
 export default async function HealthPage() {
   const session = await requireSession();
+  // Hidden in the navigation, but a URL still resolves — so the page
+  // itself has to know what the plan carries.
+  const plan = await getTenantPlan(session.tenant.id);
+  if (!plan.allows("vaccinations")) {
+    return <UpgradeNotice what="Health and vaccinations" from={featureFrom("vaccinations")} />;
+  }
   const flocks = await getFlocks(session.tenant.id);
 
   if (flocks.length === 0) {

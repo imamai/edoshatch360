@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 
 import { CAN_SEE_MONEY, CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantPlan } from "@/lib/data/plan";
+import { featureFrom } from "@/lib/plans";
+import { UpgradeNotice } from "@/components/app/upgrade-notice";
 import { ProductManager } from "./product-manager";
 import { ReadOnlyNotice } from "@/components/app/read-only-notice";
 import type { Product } from "@/lib/database.types";
@@ -17,6 +20,12 @@ export const metadata: Metadata = { title: "Products" };
  */
 export default async function ProductsPage() {
   const session = await requireSession();
+  // Hidden in the navigation, but a URL still resolves — so the page
+  // itself has to know what the plan carries.
+  const plan = await getTenantPlan(session.tenant.id);
+  if (!plan.allows("invoicing")) {
+    return <UpgradeNotice what="Products" from={featureFrom("invoicing")} />;
+  }
   if (!can(session.role, CAN_SEE_MONEY)) notFound();
 
   const supabase = await createClient();

@@ -5,6 +5,9 @@ import { FileText, Receipt, ShoppingCart, TrendingUp, Wallet } from "lucide-reac
 
 import { CAN_SEE_MONEY, can, requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantPlan } from "@/lib/data/plan";
+import { featureFrom } from "@/lib/plans";
+import { UpgradeNotice } from "@/components/app/upgrade-notice";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
@@ -76,6 +79,12 @@ export default async function SalesPage({
   searchParams: Promise<{ type?: string }>;
 }) {
   const session = await requireSession();
+  // Hidden in the navigation, but a URL still resolves — so the page
+  // itself has to know what the plan carries.
+  const plan = await getTenantPlan(session.tenant.id);
+  if (!plan.allows("invoicing")) {
+    return <UpgradeNotice what="Invoices and receipts" from={featureFrom("invoicing")} />;
+  }
   if (!can(session.role, CAN_SEE_MONEY)) notFound();
 
   const params = await searchParams;
