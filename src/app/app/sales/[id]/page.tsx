@@ -5,6 +5,7 @@ import { ChevronLeft, Wallet } from "lucide-react";
 
 import { CAN_SEE_MONEY, can, requireSession } from "@/lib/data/session";
 import { getBrandingWithUrls } from "@/lib/data/branding";
+import { getTaxSettings, vatLabel } from "@/lib/data/tax";
 import { createClient } from "@/lib/supabase/server";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -48,6 +49,7 @@ export default async function SaleDetailPage({
   const doc = sale as Sale;
 
   const branding = await getBrandingWithUrls(session.tenant.id);
+  const tax = await getTaxSettings(session.tenant.id);
   const [itemRes, paymentRes, customerRes] = await Promise.all([
     supabase.from("edoshatch360_sale_items").select("*").eq("sale_id", id).order("sort_order"),
     supabase
@@ -97,6 +99,7 @@ export default async function SaleDetailPage({
     subtotalCents: doc.subtotal_cents,
     discountCents: doc.discount_cents,
     taxCents: doc.tax_cents,
+    taxLabel: vatLabel(tax),
     totalCents: doc.total_cents,
     amountPaidCents: doc.amount_paid_cents,
     balanceCents: doc.balance_cents,
@@ -124,6 +127,7 @@ export default async function SaleDetailPage({
             business={business}
             branding={branding}
             currency={currency}
+            footer={tax.invoiceFooter}
             badge={
               <Badge tone={STATUS_TONE[doc.status]} dot>
                 {doc.status}

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { CAN_SEE_MONEY, CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { getBrandingWithUrls } from "@/lib/data/branding";
+import { getTaxSettings, vatLabel } from "@/lib/data/tax";
 import { createClient } from "@/lib/supabase/server";
 import { Counter } from "@/components/app/counter/counter";
 import { ReadOnlyNotice } from "@/components/app/read-only-notice";
@@ -28,7 +29,7 @@ export default async function CounterPage() {
   }
 
   const supabase = await createClient();
-  const [productRes, customerRes, branding] = await Promise.all([
+  const [productRes, customerRes, branding, tax] = await Promise.all([
     supabase
       .from("edoshatch360_products")
       .select("*")
@@ -42,6 +43,7 @@ export default async function CounterPage() {
       .eq("is_active", true)
       .order("name"),
     getBrandingWithUrls(session.tenant.id),
+    getTaxSettings(session.tenant.id),
   ]);
 
   const tenant = session.tenant;
@@ -65,6 +67,13 @@ export default async function CounterPage() {
         signatoryName: branding.signatoryName,
         signatoryTitle: branding.signatoryTitle,
       }}
+      tax={{
+        vatRegistered: tax.vatRegistered,
+        vatRate: tax.vatRate,
+        pricesIncludeVat: tax.pricesIncludeVat,
+        label: vatLabel(tax),
+      }}
+      invoiceFooter={tax.invoiceFooter}
     />
   );
 }

@@ -1,22 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { ChevronDown, Plus } from "lucide-react";
 
 import { Wordmark } from "@/components/brand/logo";
-import { activeHref, isChildActive, visibleGroups } from "@/lib/nav";
+import { activeHref, visibleGroups } from "@/lib/nav";
 import { useStoredJson } from "@/lib/hooks/use-browser-state";
 import type { FarmMode, Role } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
 
 const COLLAPSE_KEY = "hatch360:sidebar-collapsed";
-const OPEN_KEY = "hatch360:sidebar-open-items";
 
 // Stable reference: useStoredJson returns this as-is when nothing is stored,
 // so an inline literal here would change identity on every render.
 const NONE_COLLAPSED: Record<string, boolean> = {};
-const NONE_OPEN: Record<string, boolean> = {};
 
 export function Sidebar({
   role,
@@ -28,7 +26,6 @@ export function Sidebar({
   canWrite: boolean;
 }) {
   const pathname = usePathname();
-  const search = useSearchParams().toString();
   const groups = visibleGroups(role, mode, canWrite);
   const active = activeHref(
     pathname,
@@ -37,15 +34,9 @@ export function Sidebar({
 
   // Which groups the user has folded away, remembered between visits.
   const [collapsed, setCollapsed] = useStoredJson(COLLAPSE_KEY, NONE_COLLAPSED);
-  // Which nested entries the user has opened, likewise.
-  const [opened, setOpened] = useStoredJson(OPEN_KEY, NONE_OPEN);
 
   function toggle(title: string) {
     setCollapsed({ ...collapsed, [title]: !collapsed[title] });
-  }
-
-  function toggleItem(href: string) {
-    setOpened({ ...opened, [href]: !opened[href] });
   }
 
   return (
@@ -99,83 +90,28 @@ export function Sidebar({
               <ul id={sectionId} className="flex flex-col gap-px" hidden={isCollapsed}>
                 {group.items.map((item) => {
                   const Icon = item.icon;
-                  const kids = item.children ?? [];
-                  const activeKid = kids.find((c) => isChildActive(c.href, pathname, search));
-                  // The parent is the current page only when no child is: the
-                  // bare list and its filtered views are different places.
-                  const isActive = active === item.href && !activeKid;
-                  // An entry holding the open page is never left folded shut.
-                  const isOpen = kids.length > 0 && (Boolean(opened[item.href]) || Boolean(activeKid));
-                  const kidsId = `nav-kids-${item.href.replace(/\W+/g, "-")}`;
+                  const isActive = active === item.href;
 
                   return (
                     <li key={item.href}>
-                      <div className="flex items-center">
-                        <Link
-                          href={item.href}
-                          aria-current={isActive ? "page" : undefined}
-                          className={cn(
-                            "flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2.5 py-[0.4375rem] text-sm transition-colors",
-                            isActive
-                              ? "bg-brand-soft font-semibold text-brand"
-                              : "text-ink-soft hover:bg-surface-sunk hover:text-ink",
-                          )}
-                        >
-                          <Icon
-                            className={cn(
-                              "h-4 w-4 shrink-0",
-                              isActive || activeKid ? "text-brand" : "text-ink-faint",
-                            )}
-                          />
-                          <span className="truncate">{item.label}</span>
-                        </Link>
-
-                        {kids.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => toggleItem(item.href)}
-                            aria-expanded={isOpen}
-                            aria-controls={kidsId}
-                            aria-label={`${isOpen ? "Hide" : "Show"} ${item.label} documents`}
-                            className="ml-0.5 shrink-0 rounded p-1 text-ink-faint hover:bg-surface-sunk hover:text-ink"
-                          >
-                            <ChevronDown
-                              className={cn(
-                                "h-3.5 w-3.5 transition-transform",
-                                !isOpen && "-rotate-90",
-                              )}
-                            />
-                          </button>
+                      <Link
+                        href={item.href}
+                        aria-current={isActive ? "page" : undefined}
+                        className={cn(
+                          "flex min-w-0 items-center gap-2.5 rounded-md px-2.5 py-[0.4375rem] text-sm transition-colors",
+                          isActive
+                            ? "bg-brand-soft font-semibold text-brand"
+                            : "text-ink-soft hover:bg-surface-sunk hover:text-ink",
                         )}
-                      </div>
-
-                      {kids.length > 0 && (
-                        <ul
-                          id={kidsId}
-                          hidden={!isOpen}
-                          className="mt-px ml-[1.4375rem] flex flex-col gap-px border-l border-line pl-2"
-                        >
-                          {kids.map((kid) => {
-                            const kidActive = kid.href === activeKid?.href;
-                            return (
-                              <li key={kid.href}>
-                                <Link
-                                  href={kid.href}
-                                  aria-current={kidActive ? "page" : undefined}
-                                  className={cn(
-                                    "block truncate rounded-md px-2.5 py-[0.3125rem] text-[0.8125rem] transition-colors",
-                                    kidActive
-                                      ? "bg-brand-soft font-semibold text-brand"
-                                      : "text-ink-soft hover:bg-surface-sunk hover:text-ink",
-                                  )}
-                                >
-                                  {kid.label}
-                                </Link>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
+                      >
+                        <Icon
+                          className={cn(
+                            "h-4 w-4 shrink-0",
+                            isActive ? "text-brand" : "text-ink-faint",
+                          )}
+                        />
+                        <span className="truncate">{item.label}</span>
+                      </Link>
                     </li>
                   );
                 })}

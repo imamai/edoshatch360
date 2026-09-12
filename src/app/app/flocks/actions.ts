@@ -66,12 +66,14 @@ export async function createFlock(
     return { error: "The placement date cannot be in the future." };
   }
 
-  // Batch code is generated, never typed: farm initials + bird type +
-  // sequence, e.g. RUI-BRO-003. Allocated in Postgres under an advisory lock
-  // so two people adding a flock at the same moment cannot collide.
+  // Batch code is generated, never typed: farm initials + breed + sequence,
+  // e.g. RUI-KEN-003. The breed is what tells two batches on one farm apart;
+  // the bird type only stands in when no breed was given. Allocated in
+  // Postgres under an advisory lock so two people adding a flock at the same
+  // moment cannot collide.
   const { data: code, error: codeError } = await supabase.rpc(
     "edoshatch360_next_flock_code",
-    { p_tenant: session.tenant.id, p_farm: farmId, p_bird_type: birdType },
+    { p_tenant: session.tenant.id, p_farm: farmId, p_bird_type: birdType, p_breed: breed },
   );
 
   if (codeError || !code) {

@@ -222,8 +222,31 @@ export const BIRD_TYPE_CODE: Record<BirdType, string> = {
  * edoshatch360_flock_code_prefix() so the form can preview it before saving;
  * the database remains the authority on the sequence number.
  */
-export function flockCodePrefix(farmName: string, birdType: BirdType): string {
-  const farm =
-    farmName.replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase() || "FRM";
-  return `${farm}-${BIRD_TYPE_CODE[birdType]}`;
+/** Three letters from a name, or nothing if it has none to give. */
+function letters3(value: string): string {
+  return value.replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase();
+}
+
+/**
+ * Everything in a batch number before the sequence: RUI-LAY-KEN.
+ *
+ * Farm, bird type, then breed. The bird type says what the birds are for and
+ * the breed says which birds they are — a farm running two houses of layers
+ * has a Lohmann batch and a Kenbro batch, and RUI-LAY-001 alone cannot tell
+ * them apart.
+ *
+ * Breed is optional on the form, so its segment is simply absent when none
+ * was chosen, leaving RUI-LAY-001.
+ *
+ * This mirrors edoshatch360_next_flock_code exactly; Postgres remains the
+ * authority on the sequence number that follows.
+ */
+export function flockCodePrefix(
+  farmName: string,
+  birdType: BirdType,
+  breed?: string | null,
+): string {
+  const farm = letters3(farmName) || "FRM";
+  const breedCode = letters3(breed ?? "");
+  return [farm, BIRD_TYPE_CODE[birdType], breedCode].filter(Boolean).join("-");
 }

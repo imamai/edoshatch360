@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { today } from "@/lib/utils";
-import type { CustomerType, DocType, PayMethod } from "@/lib/database.types";
+import type { Customer, CustomerType, DocType, PayMethod } from "@/lib/database.types";
 
 export interface SaleFormState {
   error: string | null;
@@ -227,6 +227,14 @@ export interface IssueSaleInput {
   amountPaidCents: number;
   paymentReference: string | null;
   notes: string | null;
+  /** A discount on the whole sale, on top of any discount on a line. */
+  discountCents: number;
+  /**
+   * VAT added on top of the subtotal. Zero for a farm that is not registered,
+   * and zero when its prices already include VAT — in that case the tax is
+   * inside the line prices and adding it here would charge it twice.
+   */
+  taxCents: number;
   lines: CounterLine[];
 }
 
@@ -284,6 +292,11 @@ export async function issueSale(input: IssueSaleInput): Promise<IssueSaleResult>
       doc_number: docNumber as string,
       sale_date: today(),
       due_date: input.dueDate,
+      // edoshatch360_resum_sale recomputes the total as
+      // subtotal - discount_cents + tax_cents, so both of these are honoured
+      // the moment the line items land.
+      discount_cents: Math.max(0, Math.round(input.discountCents)),
+      tax_cents: Math.max(0, Math.round(input.taxCents)),
       payment_method: input.paymentMethod,
       status: input.docType === "quotation" ? "sent" : "draft",
       notes: input.notes?.trim() || null,
@@ -335,4 +348,48 @@ export async function issueSale(input: IssueSaleInput): Promise<IssueSaleResult>
   revalidatePath("/app");
 
   return { error: null, saleId: sale.id, docNumber: sale.doc_number as string };
+}
+
+/**
+ * Add a customer from the till, without leaving the sale.
+ *
+ * Deliberately narrower than createCustomer: a name and a phone number are
+ * what somebody standing at a counter actually knows, and everything else on
+ * the customer record has a sensible default. The full form on /app/customers
+ * remains the place to fill in the rest.
+ *
+ * Returns the new row so the Counter can select it immediately — the reason
+ * this exists rather than reusing the form action, which returns only a
+ * message.
+ */
+export async function quickAddCustomer(input: {
+  name: string;
+  phone: string | null;
+}): Promise<{ error: string | null; customer?: Customer }> {
+  const session = await requireSession();
+  if (!can(session.role, CAN_WRITE)) {
+    return { error: "This account cannot add customers." };
+  }
+
+  const name = input.name.trim();
+  if (!name) return { error: "What is the customer called?" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("edoshatch360_customers")
+    .insert({
+      tenant_id: session.tenant.id,
+      name,
+      phone: input.phone?.trim() || null,
+      customer_type: "individual" as CustomerType,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    return { error: "We couldn't save that customer. Try again." };
+  }
+
+  revalidatePath("/app/customers");
+  return { error: null, customer: data as Customer };
 }

@@ -37,13 +37,14 @@ export function NewFlockForm({ farms, houses }: { farms: Farm[]; houses: House[]
   const [birdType, setBirdType] = useState<BirdType>("broiler");
   const [dateMode, setDateMode] = useState<"date" | "age">("date");
   const [farmId, setFarmId] = useState(farms[0]?.id ?? "");
+  const [breed, setBreed] = useState("");
 
   const housesForFarm = houses.filter((h) => h.farm_id === farmId);
 
   // Previewed from the same rule the database uses; Postgres stays the
   // authority on the sequence number itself.
   const farmName = farms.find((f) => f.id === farmId)?.name ?? "";
-  const codePrefix = flockCodePrefix(farmName, birdType);
+  const codePrefix = flockCodePrefix(farmName, birdType, breed);
 
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -104,6 +105,7 @@ export function NewFlockForm({ farms, houses }: { farms: Farm[]; houses: House[]
               key={birdType}
               label="Breed"
               name="breed"
+              onValueChange={setBreed}
               options={BREEDS[birdType] ?? []}
               placeholder="Select a breed…"
               otherLabel="Another breed — let me type it"
@@ -133,9 +135,9 @@ export function NewFlockForm({ farms, houses }: { farms: Farm[]; houses: House[]
                 </span>
               </p>
               <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
-                Built from the farm and the bird type. The number at the end is
-                assigned when you save, counting on from your last batch of this
-                kind.
+                The farm, the bird type, then the breed once you choose
+                one. The number at the end is assigned when you save, counting
+                on from your last batch of exactly this kind.
               </p>
             </div>
           </div>

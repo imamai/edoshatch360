@@ -88,7 +88,13 @@ function readSnapshot<T>(key: string, fallback: T): T {
   let value: T = fallback;
   if (raw !== null) {
     try {
-      value = { ...fallback, ...JSON.parse(raw) } as T;
+      const parsed = JSON.parse(raw);
+      // A list is replaced, never merged. Spreading an array into an object
+      // literal quietly turns it into {0: …, 1: …} — no length, no filter,
+      // and a component that reads it as an array simply sees nothing.
+      value = Array.isArray(fallback)
+        ? ((Array.isArray(parsed) ? parsed : fallback) as T)
+        : ({ ...fallback, ...parsed } as T);
     } catch {
       value = fallback;
     }
@@ -101,6 +107,10 @@ function readSnapshot<T>(key: string, fallback: T): T {
 /**
  * A JSON value in localStorage, with `fallback` used on the server and
  * whenever storage is unavailable or unreadable.
+ *
+ * An object fallback is merged over what was stored, so a value written
+ * before a new field existed still gains that field's default. An array
+ * fallback is replaced outright, since merging positions is meaningless.
  *
  * `fallback` MUST be a stable reference (module-level constant or useMemo).
  * It is returned as-is when nothing is stored, so a fresh object literal on

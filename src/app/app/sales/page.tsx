@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FileText, Plus, Receipt, ShoppingCart, TrendingUp, Wallet } from "lucide-react";
+import { FileText, Receipt, ShoppingCart, TrendingUp, Wallet } from "lucide-react";
 
 import { CAN_SEE_MONEY, can, requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
@@ -139,10 +139,6 @@ export default async function SalesPage({
           <p className="mt-1 text-sm text-ink-soft">{view.lead}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ButtonLink href="/app/sales/new" size="sm" variant="secondary">
-            <Plus className="h-4 w-4" />
-            New sale
-          </ButtonLink>
           <ButtonLink href="/app/sales/counter" size="sm">
             <ShoppingCart className="h-4 w-4" />
             Counter

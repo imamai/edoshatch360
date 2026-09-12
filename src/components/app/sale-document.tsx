@@ -45,7 +45,15 @@ export interface SaleDocumentModel {
   lines: SaleDocumentLine[];
   subtotalCents: number;
   discountCents: number;
+  /** VAT added on top of the subtotal. Zero when prices already include it. */
   taxCents: number;
+  /**
+   * VAT already contained in the total, for a farm whose prices include it.
+   * Disclosed rather than added — the customer pays the same either way.
+   */
+  taxIncludedCents?: number;
+  /** "VAT (16%)" — the rate as configured, so the document states it. */
+  taxLabel?: string;
   totalCents: number;
   amountPaidCents: number;
   balanceCents: number;
@@ -73,6 +81,7 @@ export function SaleDocument({
   branding,
   currency,
   badge,
+  footer,
 }: {
   model: SaleDocumentModel;
   business: SaleDocumentBusiness;
@@ -80,6 +89,8 @@ export function SaleDocument({
   currency: string;
   /** Status pill — page chrome, never printed. */
   badge?: React.ReactNode;
+  /** Bank details or terms, from Settings → Tax & invoices. */
+  footer?: string | null;
 }) {
   const isQuotation = model.docType === "quotation";
 
@@ -214,7 +225,7 @@ export function SaleDocument({
           )}
           {model.taxCents > 0 && (
             <div className="flex justify-between py-1.5">
-              <dt className="text-ink-soft">VAT</dt>
+              <dt className="text-ink-soft">{model.taxLabel ?? "VAT"}</dt>
               <dd className="font-medium text-ink tnum">
                 {formatMoney(model.taxCents, { currency, decimals: true })}
               </dd>
@@ -226,6 +237,18 @@ export function SaleDocument({
               {formatMoney(model.totalCents, { currency, decimals: true })}
             </dd>
           </div>
+          {/* Inclusive pricing: the VAT is inside the total above, so it is
+              disclosed here rather than added to it. */}
+          {(model.taxIncludedCents ?? 0) > 0 && (
+            <div className="flex justify-between pb-1.5 text-xs">
+              <dt className="text-ink-faint">
+                Includes {model.taxLabel ?? "VAT"}
+              </dt>
+              <dd className="text-ink-faint tnum">
+                {formatMoney(model.taxIncludedCents!, { currency, decimals: true })}
+              </dd>
+            </div>
+          )}
           {!isQuotation && (
             <>
               <div className="flex justify-between py-1.5">
@@ -293,13 +316,20 @@ export function SaleDocument({
         </div>
       )}
 
-      <p className="mt-6 border-t border-line pt-4 text-center text-xs text-ink-faint">
-        {isQuotation
-          ? "This quotation is an offer, not a demand for payment."
-          : model.balanceCents <= 0
-            ? "Paid in full — thank you."
-            : "Thank you for your business."}
-      </p>
+      <div className="mt-6 border-t border-line pt-4 text-center">
+        {footer && (
+          <p className="mx-auto mb-2 max-w-lg text-xs leading-relaxed whitespace-pre-line text-ink-soft">
+            {footer}
+          </p>
+        )}
+        <p className="text-xs text-ink-faint">
+          {isQuotation
+            ? "This quotation is an offer, not a demand for payment."
+            : model.balanceCents <= 0
+              ? "Paid in full — thank you."
+              : "Thank you for your business."}
+        </p>
+      </div>
     </>
   );
 }
