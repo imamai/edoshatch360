@@ -5,21 +5,12 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { addDays, today } from "@/lib/utils";
+import { CYCLE_DAYS } from "@/lib/catalogues";
 import type { BirdType, EntryFrequency } from "@/lib/database.types";
 
 export interface FlockFormState {
   error: string | null;
 }
-
-/** Typical days from placement to harvest, used to propose a harvest date. */
-const CYCLE_DAYS: Partial<Record<BirdType, number>> = {
-  broiler: 35,
-  kienyeji: 120,
-  improved_kienyeji: 100,
-  chick: 42,
-  pullet: 126,
-  turkey: 140,
-};
 
 export async function createFlock(
   _prev: FlockFormState,

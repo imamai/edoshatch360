@@ -1,29 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Bird, Plus } from "lucide-react";
+import { Bird, Plus } from "lucide-react";
 
 import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
-import { BIRD_TYPE_LABEL, FLOCK_STATUS_LABEL, flockAgeDays, getFlocks } from "@/lib/data/flocks";
+import type { FlockMetrics } from "@/lib/database.types";
+import { flockAgeDays, getFlocks } from "@/lib/data/flocks";
 
 import { Card, CardBody } from "@/components/ui/card";
-import { Badge, type Tone } from "@/components/ui/badge";
+import { FlockCard } from "@/components/app/flock-card";
 import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatNumber, formatPercent } from "@/lib/utils";
-import type { Flock } from "@/lib/database.types";
+import { formatNumber } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Flocks" };
-
-const STATUS_TONE: Record<Flock["status"], Tone> = {
-  planned: "neutral",
-  brooding: "info",
-  growing: "brand",
-  laying: "good",
-  finishing: "attention",
-  harvested: "neutral",
-  closed: "neutral",
-};
 
 export default async function FlocksPage({
   searchParams,
@@ -43,7 +33,7 @@ export default async function FlocksPage({
   const metrics = await Promise.all(
     flocks.map(async (f) => {
       const { data } = await supabase.rpc("edoshatch360_flock_metrics", { p_flock: f.id });
-      return { id: f.id, m: data as { mortality_pct: number; lay_pct: number | null } | null };
+      return { id: f.id, m: data as Pick<FlockMetrics, "mortality_pct" | "lay_pct"> | null };
     }),
   );
   const metricById = new Map(metrics.map((x) => [x.id, x.m]));
@@ -88,67 +78,15 @@ export default async function FlocksPage({
         </Card>
       ) : (
         <ul className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {flocks.map((flock) => {
-            const m = metricById.get(flock.id);
-            const age = flockAgeDays(flock);
-            const lossPct = m?.mortality_pct ?? 0;
-
-            return (
-              <li key={flock.id}>
-                <Link
-                  href={`/app/flocks/${flock.id}`}
-                  className="group flex h-full flex-col rounded-xl border border-line bg-surface p-4 shadow-card transition-colors hover:border-brand/40"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
-                      <Bird className="h-5 w-5" />
-                    </span>
-                    <Badge tone={STATUS_TONE[flock.status]} dot>
-                      {FLOCK_STATUS_LABEL[flock.status]}
-                    </Badge>
-                  </div>
-
-                  <h2 className="mt-3 font-display text-base font-bold text-ink">
-                    {flock.code}
-                  </h2>
-                  <p className="text-xs text-ink-faint">
-                    {BIRD_TYPE_LABEL[flock.bird_type]}
-                    {flock.breed ? ` · ${flock.breed}` : ""} · day {age}
-                  </p>
-
-                  <dl className="mt-4 grid grid-cols-3 gap-2 border-t border-line pt-3">
-                    <div>
-                      <dt className="text-[0.6875rem] text-ink-faint">Birds</dt>
-                      <dd className="text-sm font-semibold text-ink tnum">
-                        {formatNumber(flock.current_count)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[0.6875rem] text-ink-faint">Placed</dt>
-                      <dd className="text-sm font-semibold text-ink tnum">
-                        {formatNumber(flock.placement_count)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[0.6875rem] text-ink-faint">Losses</dt>
-                      <dd
-                        className={`text-sm font-semibold tnum ${
-                          lossPct > 5 ? "text-critical" : "text-ink"
-                        }`}
-                      >
-                        {formatPercent(lossPct)}
-                      </dd>
-                    </div>
-                  </dl>
-
-                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand">
-                    Open
-                    <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
+          {flocks.map((flock) => (
+            <li key={flock.id}>
+              <FlockCard
+                flock={flock}
+                metrics={metricById.get(flock.id) ?? null}
+                age={flockAgeDays(flock)}
+              />
+            </li>
+          ))}
         </ul>
       )}
     </div>

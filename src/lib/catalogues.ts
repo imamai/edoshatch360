@@ -218,10 +218,22 @@ export const BIRD_TYPE_CODE: Record<BirdType, string> = {
 };
 
 /**
- * The prefix a new flock's code will carry. Mirrors
- * edoshatch360_flock_code_prefix() so the form can preview it before saving;
- * the database remains the authority on the sequence number.
+ * Typical days from placement to harvest.
+ *
+ * Used to propose a harvest date when a flock is placed, and to show how far
+ * through its cycle a flock has come. Layers are deliberately absent: a layer
+ * is not harvested on a schedule, it lays for well over a year, so a progress
+ * bar against a cycle length would be meaningless for one.
  */
+export const CYCLE_DAYS: Partial<Record<BirdType, number>> = {
+  broiler: 35,
+  kienyeji: 120,
+  improved_kienyeji: 100,
+  chick: 42,
+  pullet: 126,
+  turkey: 140,
+};
+
 /** Three letters from a name, or nothing if it has none to give. */
 function letters3(value: string): string {
   return value.replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase();
