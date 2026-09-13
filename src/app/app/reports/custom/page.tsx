@@ -314,6 +314,11 @@ export default async function CustomReportPage({
                 </table>
               </div>
             </ReportDocument>
+
+            {/* On paper the letterhead carries the count. */}
+            <p className="mt-2.5 text-xs text-ink-faint print:hidden">
+              Displaying {rows.length} record{rows.length === 1 ? "" : "s"}.
+            </p>
           </CardBody>
         </Card>
       )}

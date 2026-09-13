@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
-  Bird, ChevronRight, Coins, Egg, HeartPulse, Package,
+  Bird, ChevronRight, ClipboardList, Coins, Egg, HeartPulse, Package,
 } from "lucide-react";
 
 import { CAN_SEE_MONEY, can, requireSession } from "@/lib/data/session";
@@ -77,6 +77,17 @@ export default async function ReportsPage({
       title: "Flock performance",
       body: "One row per flock with age, birds placed and remaining, mortality, total eggs, feed used and feed conversion.",
       available: true,
+    },
+    {
+      // The one report that is a document rather than a table, so it has a
+      // page of its own rather than a row set and a filter bar.
+      key: "batch",
+      area: "flock" as AreaKey,
+      icon: ClipboardList,
+      title: "Batch summary",
+      body: "A single batch on one page: what it is, how it is doing, what it has earned, and its recent daily records.",
+      available: true,
+      href: "/app/reports/batch",
     },
     {
       key: "health",
@@ -200,7 +211,7 @@ export default async function ReportsPage({
               return (
                 <Link
                   key={report.key}
-                  href={`/app/reports/custom?area=${report.key}&from=${from}&to=${to}`}
+                  href={report.href ?? `/app/reports/custom?area=${report.key}&from=${from}&to=${to}`}
                   title={report.body}
                   className="group flex items-center justify-between gap-3 rounded-lg border border-line bg-surface-sunk px-3 py-2.5 transition-colors hover:border-brand hover:bg-brand-soft"
                 >

@@ -13,8 +13,12 @@ import type {
  * signature. A page of numbers with no letterhead and nothing signed is not
  * something anyone can act on.
  *
- * Presentation only, no data access, so it renders on screen and on paper from
- * the same markup — what is previewed is what prints.
+ * Only the table shows on screen: the controls above it already say what the
+ * report covers, and nobody needs their own address read back to them. The
+ * letterhead, the filter summary and the signatures appear when it is printed,
+ * which is the moment the page has to stand on its own.
+ *
+ * Presentation only, no data access, so either side of the boundary can use it.
  */
 export function ReportDocument({
   title,
@@ -43,7 +47,10 @@ export function ReportDocument({
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      {/* Letterhead, filters and sign-off exist for paper. On screen the
+          controls above already say what the report covers, and the farm knows
+          its own address -- so the page stays a plain table, as it was. */}
+      <div className="hidden flex-wrap items-start justify-between gap-4 print:flex">
         <div
           className={
             branding.logoUrl
@@ -87,7 +94,7 @@ export function ReportDocument({
         </div>
       </div>
 
-      <div className="mt-7 border-t border-line pt-5">
+      <div className="mt-7 hidden border-t border-line pt-5 print:block">
         <p className="text-[0.6875rem] font-semibold tracking-[0.1em] text-ink-faint uppercase">
           Report covers
         </p>
@@ -98,10 +105,10 @@ export function ReportDocument({
         </ul>
       </div>
 
-      <div className="mt-6">{children}</div>
+      <div className="print:mt-6">{children}</div>
 
       {(signable || clientSignOff) && (
-        <div className="mt-8 flex flex-wrap justify-between gap-8">
+        <div className="mt-8 hidden flex-wrap justify-between gap-8 print:flex">
           <div className="w-56 text-center">
             <div className="flex h-14 items-end justify-center">
               {branding.signatureUrl && (
@@ -148,7 +155,7 @@ export function ReportDocument({
         </div>
       )}
 
-      <div className="mt-6 border-t border-line pt-4 text-center">
+      <div className="mt-6 hidden border-t border-line pt-4 text-center print:block">
         <p className="text-xs text-ink-faint">
           Produced from the records held by {business.name}. Figures cover only the
           period and selection stated above.
