@@ -15,7 +15,8 @@ import {
   type SaleDocumentBusiness,
   type SaleDocumentModel,
 } from "@/components/app/sale-document";
-import { PaymentForm, PrintButton } from "./payment-form";
+import { PaymentForm } from "./payment-form";
+import { PrintButton } from "@/components/app/print-button";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type {
   Customer, CustomerPayment, Sale, SaleItem, SaleStatus,

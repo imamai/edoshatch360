@@ -181,7 +181,7 @@ export function SaleDocument({
                 load-bearing: browsers drop background colours when printing,
                 and a printed invoice is exactly where this is meant to be
                 seen. */}
-            <tr className="border-y border-line bg-brand-soft text-left text-xs text-brand-dark [-webkit-print-color-adjust:exact] [print-color-adjust:exact]">
+            <tr className="border-y border-line-strong bg-brand-band text-left text-xs text-brand-dark [-webkit-print-color-adjust:exact] [print-color-adjust:exact]">
               <th scope="col" className="py-2.5 pr-3 pl-3 font-semibold">Description</th>
               <th scope="col" className="px-3 py-2.5 text-right font-semibold">Qty</th>
               <th scope="col" className="px-3 py-2.5 text-right font-semibold">Unit price</th>

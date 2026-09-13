@@ -28,6 +28,10 @@
   --color-brand-mid: #2d7d57;
   --color-brand-soft: #e8f2ec;
   --color-brand-tint: #f2f8f4;
+  /* One step heavier than brand-soft, for the column band on a printed
+     document — pale enough to keep brand-dark text crisp, solid enough to
+     survive a cheap inkjet and read as a header rather than a tint. */
+  --color-brand-band: #cfe3d7;
 
   /* Warm gold — used sparingly as the single accent */
   --color-gold: #e0a53c;

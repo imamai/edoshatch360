@@ -9,6 +9,10 @@ import { getTenantPlan } from "@/lib/data/plan";
 import { featureFrom } from "@/lib/plans";
 import { UpgradeNotice } from "@/components/app/upgrade-notice";
 import { PrintButton } from "@/components/app/print-button";
+import { ReportDocument } from "@/components/app/report-document";
+import { getBrandingWithUrls } from "@/lib/data/branding";
+import type { SaleDocumentBusiness } from "@/components/app/sale-document";
+import { Card, CardBody } from "@/components/ui/card";
 import {
   REPORT_AREAS, areaFor, buildReportRows, isReportKey, type ReportKey,
 } from "@/lib/data/report-rows";
@@ -101,9 +105,21 @@ export default async function CustomReportPage({
   // be set to a combination that returns nothing.
   const batches = (flocks ?? []).filter((f) => !farmId || f.farm_id === farmId);
 
-  const { rows } = await buildReportRows(session.tenant.id, {
-    report: area, from, to, farmId, flockId, byUserId,
-  });
+  const [{ rows }, branding] = await Promise.all([
+    buildReportRows(session.tenant.id, {
+      report: area, from, to, farmId, flockId, byUserId,
+    }),
+    getBrandingWithUrls(session.tenant.id),
+  ]);
+
+  // The farm's own details, exactly as they appear on an invoice.
+  const business: SaleDocumentBusiness = {
+    name: session.tenant.name,
+    address: session.tenant.address,
+    phone: session.tenant.phone,
+    email: session.tenant.email,
+    kraPin: session.tenant.kra_pin,
+  };
 
   const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
@@ -144,16 +160,6 @@ export default async function CustomReportPage({
         </p>
       </div>
 
-      {/* The letterhead, which exists only on paper. */}
-      <header className="hidden print:block">
-        <h1 className="text-lg font-semibold text-ink">{meta.label} report</h1>
-        <p className="mt-0.5 text-sm text-ink-soft">{session.tenant.name}</p>
-        <p className="mt-1.5 text-xs text-ink-soft">{applied.join(" · ")}</p>
-        <p className="mt-0.5 text-xs text-ink-faint">
-          Generated {formatDate(today(), "long")} · {rows.length} record
-          {rows.length === 1 ? "" : "s"}
-        </p>
-      </header>
 
       {/* GET, so the generated report lives in the URL and can be shared. */}
       <form method="get" className="flex flex-col gap-3.5 rounded-lg border border-line bg-surface p-4 print:hidden">
@@ -259,40 +265,57 @@ export default async function CustomReportPage({
           </p>
         </div>
       ) : (
-        <div className="print-sheet flex flex-col gap-2.5">
-          {/* On screen a wide report scrolls sideways in its own box. On paper
-              there is nowhere to scroll to, so the box stops constraining and
-              the table is allowed to fit the page instead. */}
-          <div className="scroll-slim overflow-x-auto rounded-lg border border-line print:overflow-visible print:rounded-none print:border-0">
-            <table className="w-full min-w-max border-collapse text-sm print:min-w-0 print:text-[9px]">
-              <thead>
-                <tr className="border-b border-line bg-surface-sunk text-left">
-                  {columns.map((c) => (
-                    <th key={c} className="px-3 py-2.5 font-medium text-ink-soft print:px-1 print:py-1">
-                      {c}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, i) => (
-                  <tr key={i} className="border-b border-line last:border-0">
-                    {columns.map((c) => (
-                      <td key={c} className="px-3 py-2 text-ink tnum print:px-1 print:py-0.5">
-                        {row[c] === null || row[c] === "" ? "—" : String(row[c])}
-                      </td>
+        <Card className="print-sheet print:border-0 print:shadow-none">
+          <CardBody className="sm:p-8">
+            <ReportDocument
+              title={`${meta.label} report`}
+              business={business}
+              branding={branding}
+              covers={applied}
+              recordCount={rows.length}
+              clientSignOff={area === "financial"}
+            >
+              {/* On screen a wide report scrolls sideways in its own box. On
+                  paper there is nowhere to scroll to, so the box stops
+                  constraining and the table is allowed to fit the page. */}
+              <div className="scroll-slim overflow-x-auto print:overflow-visible">
+                <table className="w-full min-w-max border-collapse text-sm print:min-w-0 print:text-[9px]">
+                  <thead>
+                    {/* The column band, same weight as an invoice's.
+                        print-color-adjust is load-bearing: browsers drop
+                        background colours when printing, and paper is exactly
+                        where this is meant to be seen. */}
+                    <tr className="border-y border-line-strong bg-brand-band text-left text-xs text-brand-dark [-webkit-print-color-adjust:exact] [print-color-adjust:exact]">
+                      {columns.map((c) => (
+                        <th
+                          key={c}
+                          scope="col"
+                          className="px-3 py-2.5 font-semibold print:px-1 print:py-1"
+                        >
+                          {c}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {rows.map((row, i) => (
+                      <tr key={i}>
+                        {columns.map((c) => (
+                          <td
+                            key={c}
+                            className="px-3 py-2 text-ink tnum print:px-1 print:py-0.5"
+                          >
+                            {row[c] === null || row[c] === "" ? "—" : String(row[c])}
+                          </td>
+                        ))}
+                      </tr>
                     ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* The printed letterhead already carries the count. */}
-          <p className="text-xs text-ink-faint print:hidden">
-            Displaying {rows.length} record{rows.length === 1 ? "" : "s"}.
-          </p>
-        </div>
+                  </tbody>
+                </table>
+              </div>
+            </ReportDocument>
+          </CardBody>
+        </Card>
       )}
     </div>
   );

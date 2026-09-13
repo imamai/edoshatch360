@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { CheckCircle2, Printer } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 
 import { recordPayment, type SaleFormState } from "../actions";
 import { Button } from "@/components/ui/button";
@@ -63,19 +63,5 @@ export function PaymentForm({
         {pending ? "Recording" : "Record payment"}
       </Button>
     </form>
-  );
-}
-
-/**
- * Printing is the browser's own dialogue rather than a generated PDF: it
- * reaches a real printer and a "save as PDF" option on every platform, with
- * no library to ship over a slow connection.
- */
-export function PrintButton() {
-  return (
-    <Button variant="secondary" size="sm" onClick={() => window.print()}>
-      <Printer className="h-4 w-4" />
-      Print or save as PDF
-    </Button>
   );
 }
