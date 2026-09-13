@@ -6,6 +6,7 @@ import { Topbar } from "@/components/app/topbar";
 import { BottomNav } from "@/components/app/bottom-nav";
 import { OfflineProvider } from "@/components/app/offline-provider";
 import { RegisterServiceWorker } from "@/components/app/register-sw";
+import { TrialNotice } from "@/components/app/trial-notice";
 
 export default async function AppLayout({
   children,
@@ -42,6 +43,8 @@ export default async function AppLayout({
             role={session.role}
             unreadCount={count ?? 0}
           />
+
+          <TrialNotice plan={plan} />
 
           {/* pb-24 on mobile clears the fixed bottom bar and the floating action. */}
           <main className="flex-1 px-4 pt-5 pb-24 sm:px-6 md:pb-8">{children}</main>

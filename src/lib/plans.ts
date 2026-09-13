@@ -77,6 +77,41 @@ export function featureFrom(feature: PlanFeature): PlanCode {
   return FEATURE_FROM[feature];
 }
 
+/**
+ * What each feature is called to a farmer, rather than to the code. Used
+ * wherever the app has to name a feature out loud — a trial ending, an
+ * upgrade notice — so the same thing is never called two different things.
+ */
+export const FEATURE_LABEL: Record<PlanFeature, string> = {
+  invoicing: "Customers, invoices and receipts",
+  inventory: "Inventory and reorder alerts",
+  vaccinations: "Vaccination scheduling and reminders",
+  fcr: "Flock profitability and FCR",
+  health_score: "Farm Health Score",
+  reports_export: "Production and financial reports",
+  mpesa: "M-Pesa collection",
+  multi_farm: "Multi-farm dashboard",
+  staff_roles: "Staff accounts and roles",
+  benchmarking: "Benchmarking against previous batches",
+  audit_log: "Audit log",
+  etims: "eTIMS-ready tax invoices",
+  api: "API access",
+  white_label: "White-label branding",
+};
+
+const ALL_FEATURES = Object.keys(FEATURE_FROM) as PlanFeature[];
+
+/**
+ * The features a tenant has today that it would not have on `to`.
+ *
+ * A trial grants more than the farm is paying for, so the day it ends things
+ * disappear. Naming them in advance is the difference between a downgrade and
+ * a farmer wondering what broke.
+ */
+export function featuresLost(from: PlanCode | null, to: PlanCode | null): PlanFeature[] {
+  return ALL_FEATURES.filter((f) => planAllows(from, f) && !planAllows(to, f));
+}
+
 export function planAllows(plan: PlanCode | null, feature: PlanFeature): boolean {
   // Null means this organisation has no subscription row at all — it predates
   // billing. Locking those farms out of screens they have been using for weeks
