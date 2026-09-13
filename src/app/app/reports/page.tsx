@@ -7,7 +7,7 @@ import {
 import { CAN_SEE_MONEY, can, requireSession } from "@/lib/data/session";
 import { computeKpis, getDashboardData } from "@/lib/data/dashboard";
 
-import { formatMoney, formatNumber, formatPercent } from "@/lib/utils";
+import { addDays, formatMoney, formatNumber, formatPercent, today } from "@/lib/utils";
 import { getTenantPlan } from "@/lib/data/plan";
 import { featureFrom } from "@/lib/plans";
 import { UpgradeNotice } from "@/components/app/upgrade-notice";
@@ -50,6 +50,11 @@ export default async function ReportsPage({
   }
   const params = await searchParams;
   const days = PERIODS.includes(Number(params.days)) ? Number(params.days) : 90;
+
+  // The period the tabs are showing, handed to each report so opening one
+  // lands on the same window the list was describing.
+  const to = today();
+  const from = addDays(to, -days);
 
   const data = await getDashboardData(session.tenant.id);
   const kpis = computeKpis(data);
@@ -136,7 +141,8 @@ export default async function ReportsPage({
       <div>
         <h1 className="text-2xl font-semibold text-ink">Standard Reports</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Export your records as CSV — opens in Excel, Google Sheets or anything else.
+          Open a report to read it, filter it, print it as a PDF or download it as
+          CSV for Excel and Google Sheets.
         </p>
       </div>
 
@@ -192,10 +198,9 @@ export default async function ReportsPage({
             {group.items.map((report) => {
               const Icon = report.icon;
               return (
-                <a
+                <Link
                   key={report.key}
-                  href={`/app/reports/export?report=${report.key}&days=${days}`}
-                  download
+                  href={`/app/reports/custom?area=${report.key}&from=${from}&to=${to}`}
                   title={report.body}
                   className="group flex items-center justify-between gap-3 rounded-lg border border-line bg-surface-sunk px-3 py-2.5 transition-colors hover:border-brand hover:bg-brand-soft"
                 >
@@ -203,15 +208,11 @@ export default async function ReportsPage({
                     <Icon className="h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
                     <span className="truncate text-sm text-ink">{report.title}</span>
                   </span>
-                  {/* The chevron is the reference pattern's affordance. It reads as
-                      "go", so the action it actually performs is spelled out for
-                      anyone not going by the glyph. */}
-                  <span className="sr-only">— download CSV</span>
                   <ChevronRight
                     className="h-4 w-4 shrink-0 text-ink-faint transition-colors group-hover:text-brand"
                     aria-hidden="true"
                   />
-                </a>
+                </Link>
               );
             })}
           </div>

@@ -8,10 +8,11 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenantPlan } from "@/lib/data/plan";
 import { featureFrom } from "@/lib/plans";
 import { UpgradeNotice } from "@/components/app/upgrade-notice";
+import { PrintButton } from "@/components/app/print-button";
 import {
   REPORT_AREAS, areaFor, buildReportRows, isReportKey, type ReportKey,
 } from "@/lib/data/report-rows";
-import { addDays, today } from "@/lib/utils";
+import { addDays, formatDate, today } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Custom report" };
 
@@ -106,6 +107,20 @@ export default async function CustomReportPage({
 
   const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
+  // What was asked for, in words. On screen it is implied by the controls; on
+  // paper the controls are gone, so a printed page that does not say which
+  // batch and which dates it covers is not evidence of anything.
+  const farmName = farmId ? ((farms ?? []).find((f) => f.id === farmId)?.name ?? null) : null;
+  const batchCode = flockId ? (batches.find((f) => f.id === flockId)?.code ?? null) : null;
+  const personName = byUserId ? (people.find((p) => p.id === byUserId)?.name ?? null) : null;
+
+  const applied = [
+    `${formatDate(from, "long")} — ${formatDate(to, "long")}`,
+    farmName && `Farm: ${farmName}`,
+    batchCode && `Batch: ${batchCode}`,
+    personName && `Recorded by: ${personName}`,
+  ].filter((x): x is string => Boolean(x));
+
   const csv = new URLSearchParams({ report: area, from, to });
   if (farmId) csv.set("farm", farmId);
   if (flockId) csv.set("flock", flockId);
@@ -113,24 +128,35 @@ export default async function CustomReportPage({
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
-      <nav className="flex items-center gap-1.5 text-sm text-ink-faint">
+      <nav className="flex items-center gap-1.5 text-sm text-ink-faint print:hidden">
         <Link href="/app/reports" className="hover:text-brand">
           Standard Reports
         </Link>
         <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-        <span className="text-ink-soft">Custom Report</span>
+        <span className="text-ink-soft">{meta.label}</span>
       </nav>
 
-      <div>
-        <h1 className="text-2xl font-semibold text-ink">Custom Report</h1>
+      <div className="print:hidden">
+        <h1 className="text-2xl font-semibold text-ink">{meta.label} report</h1>
         <p className="mt-1 text-sm text-ink-soft">
           The same reports, narrowed to the question you are asking — one batch, one
           farm, one person, any dates.
         </p>
       </div>
 
+      {/* The letterhead, which exists only on paper. */}
+      <header className="hidden print:block">
+        <h1 className="text-lg font-semibold text-ink">{meta.label} report</h1>
+        <p className="mt-0.5 text-sm text-ink-soft">{session.tenant.name}</p>
+        <p className="mt-1.5 text-xs text-ink-soft">{applied.join(" · ")}</p>
+        <p className="mt-0.5 text-xs text-ink-faint">
+          Generated {formatDate(today(), "long")} · {rows.length} record
+          {rows.length === 1 ? "" : "s"}
+        </p>
+      </header>
+
       {/* GET, so the generated report lives in the URL and can be shared. */}
-      <form method="get" className="flex flex-col gap-3.5 rounded-lg border border-line bg-surface p-4">
+      <form method="get" className="flex flex-col gap-3.5 rounded-lg border border-line bg-surface p-4 print:hidden">
         <div className="flex items-center gap-2 text-sm font-medium text-ink-soft">
           <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
           Filters
@@ -219,6 +245,8 @@ export default async function CustomReportPage({
             Download CSV
           </a>
 
+          <PrintButton />
+
           <p className="text-xs text-ink-faint">{meta.description}</p>
         </div>
       </form>
@@ -231,13 +259,16 @@ export default async function CustomReportPage({
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2.5">
-          <div className="scroll-slim overflow-x-auto rounded-lg border border-line">
-            <table className="w-full min-w-max border-collapse text-sm">
+        <div className="print-sheet flex flex-col gap-2.5">
+          {/* On screen a wide report scrolls sideways in its own box. On paper
+              there is nowhere to scroll to, so the box stops constraining and
+              the table is allowed to fit the page instead. */}
+          <div className="scroll-slim overflow-x-auto rounded-lg border border-line print:overflow-visible print:rounded-none print:border-0">
+            <table className="w-full min-w-max border-collapse text-sm print:min-w-0 print:text-[9px]">
               <thead>
                 <tr className="border-b border-line bg-surface-sunk text-left">
                   {columns.map((c) => (
-                    <th key={c} className="px-3 py-2.5 font-medium text-ink-soft">
+                    <th key={c} className="px-3 py-2.5 font-medium text-ink-soft print:px-1 print:py-1">
                       {c}
                     </th>
                   ))}
@@ -247,7 +278,7 @@ export default async function CustomReportPage({
                 {rows.map((row, i) => (
                   <tr key={i} className="border-b border-line last:border-0">
                     {columns.map((c) => (
-                      <td key={c} className="px-3 py-2 text-ink tnum">
+                      <td key={c} className="px-3 py-2 text-ink tnum print:px-1 print:py-0.5">
                         {row[c] === null || row[c] === "" ? "—" : String(row[c])}
                       </td>
                     ))}
@@ -257,7 +288,8 @@ export default async function CustomReportPage({
             </table>
           </div>
 
-          <p className="text-xs text-ink-faint">
+          {/* The printed letterhead already carries the count. */}
+          <p className="text-xs text-ink-faint print:hidden">
             Displaying {rows.length} record{rows.length === 1 ? "" : "s"}.
           </p>
         </div>
