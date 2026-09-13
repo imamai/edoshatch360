@@ -51,6 +51,11 @@ export default async function CustomReportPage({
   const params = await searchParams;
   const showMoney = can(session.role, CAN_SEE_MONEY);
 
+  // Arriving from the reports list is opening; pressing Generate is asking.
+  // Only the second shows the finished document on screen -- the form carries
+  // this marker, a plain link does not.
+  const generated = params.generated === "1";
+
   const areas = REPORT_AREAS.filter((a) => a.key !== "financial" || showMoney);
 
   const requested = params.area;
@@ -168,6 +173,8 @@ export default async function CustomReportPage({
           Filters
         </div>
 
+        <input type="hidden" name="generated" value="1" />
+
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label className="flex flex-col gap-1">
             <span className="text-xs text-ink-faint">Reporting area</span>
@@ -274,6 +281,7 @@ export default async function CustomReportPage({
               covers={applied}
               recordCount={rows.length}
               clientSignOff={area === "financial"}
+              preview={generated}
             >
               {/* On screen a wide report scrolls sideways in its own box. On
                   paper there is nowhere to scroll to, so the box stops

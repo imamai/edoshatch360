@@ -254,14 +254,11 @@ export default async function BatchSummaryPage({
                 FLOCK_STATUS_LABEL[chosen.status as FlockStatus],
               ]}
               recordCount={metrics?.days_recorded ?? 0}
+              /* Choosing a batch is the act of generating it, so the summary
+                 arrives finished rather than as a bare set of figures. */
+              preview
             >
-              {/* On screen the letterhead is hidden, so the batch names itself. */}
-              <h2 className="text-lg font-semibold text-ink print:hidden">
-                Flock summary — {chosen.code}
-                {chosen.name ? ` · ${chosen.name}` : ""}
-              </h2>
-
-              <div className="mt-4 grid gap-x-8 sm:grid-cols-2 print:mt-0">
+              <div className="grid gap-x-8 sm:grid-cols-2">
                 <div>
                   <Section title="Batch details">
                     <Line

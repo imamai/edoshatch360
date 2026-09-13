@@ -1,5 +1,5 @@
 import { LogoMark } from "@/components/brand/logo";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import type {
   SaleDocumentBranding, SaleDocumentBusiness,
 } from "@/components/app/sale-document";
@@ -13,10 +13,12 @@ import type {
  * signature. A page of numbers with no letterhead and nothing signed is not
  * something anyone can act on.
  *
- * Only the table shows on screen: the controls above it already say what the
- * report covers, and nobody needs their own address read back to them. The
- * letterhead, the filter summary and the signatures appear when it is printed,
- * which is the moment the page has to stand on its own.
+ * Landing on a report shows the table alone — the controls above it already
+ * say what it covers, and nobody needs their own address read back to them.
+ * Pressing Generate is a different act: the farmer has asked for this exact
+ * report, so `preview` shows them the finished document, letterhead and all,
+ * rather than making them open a print dialogue to find out what it looks
+ * like. Printing always shows the full document either way.
  *
  * Presentation only, no data access, so either side of the boundary can use it.
  */
@@ -27,6 +29,7 @@ export function ReportDocument({
   covers,
   recordCount,
   clientSignOff = false,
+  preview = false,
   children,
 }: {
   title: string;
@@ -41,16 +44,21 @@ export function ReportDocument({
    * farm's own record and carries only the farm's signature.
    */
   clientSignOff?: boolean;
+  /** Show the document chrome on screen, not only on paper. */
+  preview?: boolean;
   children: React.ReactNode;
 }) {
   const signable = branding.signatureUrl || branding.signatoryName;
 
+  // One decision, applied to every part of the letterhead, so the document
+  // cannot appear half-dressed.
+  const asBlock = preview ? "block" : "hidden print:block";
+  const asFlex = preview ? "flex" : "hidden print:flex";
+
   return (
     <>
-      {/* Letterhead, filters and sign-off exist for paper. On screen the
-          controls above already say what the report covers, and the farm knows
-          its own address -- so the page stays a plain table, as it was. */}
-      <div className="hidden flex-wrap items-start justify-between gap-4 print:flex">
+      {/* Always on paper; on screen only once a report has been generated. */}
+      <div className={cn("flex-wrap items-start justify-between gap-4", asFlex)}>
         <div
           className={
             branding.logoUrl
@@ -94,7 +102,7 @@ export function ReportDocument({
         </div>
       </div>
 
-      <div className="mt-7 hidden border-t border-line pt-5 print:block">
+      <div className={cn("mt-7 border-t border-line pt-5", asBlock)}>
         <p className="text-[0.6875rem] font-semibold tracking-[0.1em] text-ink-faint uppercase">
           Report covers
         </p>
@@ -105,10 +113,10 @@ export function ReportDocument({
         </ul>
       </div>
 
-      <div className="print:mt-6">{children}</div>
+      <div className={preview ? "mt-6" : "print:mt-6"}>{children}</div>
 
       {(signable || clientSignOff) && (
-        <div className="mt-8 hidden flex-wrap justify-between gap-8 print:flex">
+        <div className={cn("mt-8 flex-wrap justify-between gap-8", asFlex)}>
           <div className="w-56 text-center">
             <div className="flex h-14 items-end justify-center">
               {branding.signatureUrl && (
@@ -155,7 +163,7 @@ export function ReportDocument({
         </div>
       )}
 
-      <div className="mt-6 hidden border-t border-line pt-4 text-center print:block">
+      <div className={cn("mt-6 border-t border-line pt-4 text-center", asBlock)}>
         <p className="text-xs text-ink-faint">
           Produced from the records held by {business.name}. Figures cover only the
           period and selection stated above.
