@@ -1,7 +1,7 @@
 import {
   BarChart3, Bird, Boxes, ClipboardList, Coins, Egg, FileText,
   Home, LayoutGrid, MapPin, Receipt, Settings,
-  ShieldCheck, Sparkles, Syringe, Tags, Users, Wheat,
+  ShieldCheck, Sparkles, Syringe, Tags, UserPlus, Users, Wheat,
 } from "lucide-react";
 import type { FarmMode, Role } from "@/lib/database.types";
 import { planAllows, type PlanCode, type PlanFeature } from "@/lib/plans";
@@ -92,6 +92,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: null,
     items: [
+      { href: "/app/team", label: "Team", icon: UserPlus, roles: ADMIN },
       { href: "/app/settings", label: "Settings", icon: Settings, roles: ADMIN },
       {
         href: "/app/admin",
