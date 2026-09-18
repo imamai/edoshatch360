@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { canSendEmail, sendEmail, teamInviteEmail } from "@/lib/email";
 
 import { createClient } from "@/lib/supabase/server";
 import { CAN_ADMIN, can, requireSession } from "@/lib/data/session";
@@ -35,6 +37,20 @@ function readable(message: string | undefined, fallback: string): string {
     : fallback;
 }
 
+/**
+ * Where an invitation link should point.
+ *
+ * Read from the request rather than NEXT_PUBLIC_SITE_URL, which defaults to
+ * http://localhost:3000 -- a colleague who clicked that would reach their own
+ * machine, or nothing at all.
+ */
+async function inviteOrigin(): Promise<string> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
 export async function inviteMember(
   _prev: TeamState,
   formData: FormData,
@@ -66,14 +82,43 @@ export async function inviteMember(
 
   revalidatePath("/app/team");
 
-  // The link is shown once and never stored in the page's data, because the
-  // token is the credential. Email delivery is not wired up yet, so handing
-  // the owner the link to pass on is the honest way to make this work today.
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  // The token is the credential, so the link is shown once and never stored in
+  // the page's data. It is still returned even when the email goes out, so an
+  // owner sitting next to the new worker can just show them the screen.
+  const base = await inviteOrigin();
+  const link = `${base}/invite/${data as string}`;
+
+  if (!canSendEmail()) {
+    return {
+      error: null,
+      ok: `Invitation ready for ${email}. Email isn't set up yet, so send them this link yourself.`,
+      link,
+    };
+  }
+
+  const sent = await sendEmail({
+    to: email,
+    ...teamInviteEmail({
+      link,
+      farmName: session.tenant.name,
+      invitedBy: session.user.full_name ?? null,
+      role,
+    }),
+  });
+
+  if (!sent.sent) {
+    console.error("Hatch360 invitation email failed:", sent.reason);
+    return {
+      error: null,
+      ok: `Invitation created for ${email}, but the email didn't send. Pass them this link instead.`,
+      link,
+    };
+  }
+
   return {
     error: null,
-    ok: `Invitation ready for ${email}.`,
-    link: `${base}/invite/${data as string}`,
+    ok: `Invitation emailed to ${email}.`,
+    link,
   };
 }
 

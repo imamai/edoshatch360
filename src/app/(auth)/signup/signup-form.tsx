@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { MailCheck } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { signUpWithEmail } from "./actions";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/field";
 
 export function SignupForm() {
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmSent, setConfirmSent] = useState<string | null>(null);
@@ -29,37 +27,20 @@ export function SignupForm() {
     }
 
     setBusy(true);
-    const supabase = createClient();
 
-    const { data, error: err } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName, phone: phone || null },
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
-      },
-    });
+    // Sent by the app rather than by Supabase, so a farmer's first message
+    // from us carries our name and does not look like phishing. See ./actions.ts.
+    const result = await signUpWithEmail({ email, password, fullName, phone });
+    setBusy(false);
 
-    if (err) {
-      setBusy(false);
-      setError(
-        err.message.includes("already registered")
-          ? "There is already an account with that email. Try signing in instead."
-          : err.message,
-      );
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
 
-    // When email confirmation is switched on, signUp returns a user with no
-    // session — the account is real but cannot be used until confirmed.
-    if (data.user && !data.session) {
-      setBusy(false);
-      setConfirmSent(email);
-      return;
-    }
+    setConfirmSent(email);
+    return;
 
-    router.push("/onboarding");
-    router.refresh();
   }
 
   if (confirmSent) {
