@@ -1,6 +1,7 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CONTROL =
@@ -65,6 +66,64 @@ export function TextInput({
         className={cn(CONTROL, "h-11", error && "border-critical")}
         {...props}
       />
+    </Field>
+  );
+}
+
+/**
+ * A password field with a reveal toggle.
+ *
+ * Typing a password blind on a phone, outdoors, with one hand, is how people
+ * end up locked out of an account they know the password to. The eye lets them
+ * check what they typed.
+ *
+ * It is a real button, so it can be reached by keyboard and announces its own
+ * state; `tabIndex={-1}` would hide it from exactly the people who most need
+ * it. The input keeps its own `type`, so a password manager still recognises
+ * the field either way.
+ */
+export function PasswordInput({
+  label,
+  hint,
+  error,
+  required,
+  className,
+  id,
+  ...props
+}: Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> & {
+  label: string;
+  hint?: string;
+  error?: string | null;
+}) {
+  const auto = useId();
+  const fieldId = id ?? auto;
+  const [revealed, setRevealed] = useState(false);
+
+  return (
+    <Field label={label} hint={hint} error={error} required={required} htmlFor={fieldId} className={className}>
+      <div className="relative">
+        <input
+          id={fieldId}
+          type={revealed ? "text" : "password"}
+          required={required}
+          aria-invalid={error ? true : undefined}
+          className={cn(CONTROL, "h-11 pr-11", error && "border-critical")}
+          {...props}
+        />
+        <button
+          type="button"
+          onClick={() => setRevealed((v) => !v)}
+          aria-label={revealed ? "Hide password" : "Show password"}
+          aria-pressed={revealed}
+          className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-ink-faint hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        >
+          {revealed ? (
+            <EyeOff className="h-[1.1rem] w-[1.1rem]" aria-hidden="true" />
+          ) : (
+            <Eye className="h-[1.1rem] w-[1.1rem]" aria-hidden="true" />
+          )}
+        </button>
+      </div>
     </Field>
   );
 }

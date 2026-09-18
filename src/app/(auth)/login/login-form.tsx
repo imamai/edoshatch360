@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { TextInput } from "@/components/ui/field";
+import { PasswordInput, TextInput } from "@/components/ui/field";
 
 export function LoginForm() {
   const router = useRouter();
@@ -60,10 +60,9 @@ export function LoginForm() {
         autoFocus
         placeholder="you@example.com"
       />
-      <TextInput
+      <PasswordInput
         label="Password"
         name="password"
-        type="password"
         required
         autoComplete="current-password"
       />

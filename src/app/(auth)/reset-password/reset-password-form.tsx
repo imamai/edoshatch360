@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { TextInput } from "@/components/ui/field";
+import { PasswordInput } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 
 const MIN_LENGTH = 10;
@@ -85,19 +85,17 @@ export function ResetPasswordForm() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <TextInput
+      <PasswordInput
         label="New password"
         name="password"
-        type="password"
         required
         autoFocus
         autoComplete="new-password"
         hint={`At least ${MIN_LENGTH} characters.`}
       />
-      <TextInput
+      <PasswordInput
         label="Confirm new password"
         name="confirmPassword"
-        type="password"
         required
         autoComplete="new-password"
       />

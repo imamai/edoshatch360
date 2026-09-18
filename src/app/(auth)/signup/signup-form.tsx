@@ -4,7 +4,7 @@ import { useState } from "react";
 import { MailCheck } from "lucide-react";
 import { signUpWithEmail } from "./actions";
 import { Button } from "@/components/ui/button";
-import { TextInput } from "@/components/ui/field";
+import { PasswordInput, TextInput } from "@/components/ui/field";
 
 export function SignupForm() {
   const [busy, setBusy] = useState(false);
@@ -82,10 +82,9 @@ export function SignupForm() {
         placeholder="07xx xxx xxx"
         hint="Optional — used for M-Pesa and SMS alerts later"
       />
-      <TextInput
+      <PasswordInput
         label="Password"
         name="password"
-        type="password"
         required
         autoComplete="new-password"
         minLength={8}
