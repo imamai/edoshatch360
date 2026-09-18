@@ -60,21 +60,13 @@ export function LoginForm() {
         autoFocus
         placeholder="you@example.com"
       />
-      <div className="flex flex-col gap-1.5">
-        <TextInput
-          label="Password"
-          name="password"
-          type="password"
-          required
-          autoComplete="current-password"
-        />
-        <Link
-          href="/forgot-password"
-          className="self-end text-sm text-ink-soft hover:text-brand hover:underline"
-        >
-          Forgot your password?
-        </Link>
-      </div>
+      <TextInput
+        label="Password"
+        name="password"
+        type="password"
+        required
+        autoComplete="current-password"
+      />
 
       {linkExpired && !error && (
         <p
@@ -97,6 +89,13 @@ export function LoginForm() {
       <Button type="submit" size="lg" busy={busy}>
         {busy ? "Signing in" : "Sign in"}
       </Button>
+
+      <Link
+        href="/forgot-password"
+        className="text-center text-sm text-ink-soft hover:text-brand hover:underline"
+      >
+        Forgot your password?
+      </Link>
     </form>
   );
 }
