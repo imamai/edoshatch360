@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,9 @@ export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") ?? "/app";
+  // /auth/callback sends people back here when a link has been used already or
+  // has expired. Without this it looked like nothing had happened at all.
+  const linkExpired = params.get("error") === "link_expired";
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,13 +60,30 @@ export function LoginForm() {
         autoFocus
         placeholder="you@example.com"
       />
-      <TextInput
-        label="Password"
-        name="password"
-        type="password"
-        required
-        autoComplete="current-password"
-      />
+      <div className="flex flex-col gap-1.5">
+        <TextInput
+          label="Password"
+          name="password"
+          type="password"
+          required
+          autoComplete="current-password"
+        />
+        <Link
+          href="/forgot-password"
+          className="self-end text-sm text-ink-soft hover:text-brand hover:underline"
+        >
+          Forgot your password?
+        </Link>
+      </div>
+
+      {linkExpired && !error && (
+        <p
+          role="alert"
+          className="rounded-lg border border-critical/25 bg-critical-soft px-3 py-2.5 text-sm text-critical"
+        >
+          That link has expired or has already been used. Ask for a new one below.
+        </p>
+      )}
 
       {error && (
         <p
