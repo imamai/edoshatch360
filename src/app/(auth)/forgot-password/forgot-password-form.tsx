@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { requestPasswordReset } from "./actions";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/field";
 
@@ -18,23 +18,15 @@ export function ForgotPasswordForm() {
     setError(null);
 
     const email = String(new FormData(e.currentTarget).get("email") ?? "").trim();
-    const supabase = createClient();
 
-    // The link comes back through the existing /auth/callback route, which
-    // exchanges the code for a session and then forwards to `next`. That
-    // session is what allows the new password to be set on the next screen.
-    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
-    });
-
+    // Sent by the app itself rather than by Supabase, so the message comes
+    // from Hatch360 and the link is one the callback can actually read. See
+    // ./actions.ts.
+    const result = await requestPasswordReset(email);
     setBusy(false);
 
-    // Rate limiting is worth passing on — it tells someone to wait rather than
-    // to keep pressing a button that appears to work. Everything else reports
-    // success either way: naming an address that has no account would let
-    // anyone with this page check who farms with us.
-    if (err && err.status === 429) {
-      setError("Too many requests. Please wait a few minutes and try again.");
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
 
