@@ -5,7 +5,7 @@ import { addDays, formatMoney, formatNumber, formatPercent, today } from "@/lib/
 import { LIMITS } from "@/lib/data-quality";
 
 /**
- * The farm analysis engine behind the Hatch360 Assistant.
+ * The farm analysis engine behind edos.ai, EDOS Hatch360's assistant.
  *
  * Everything here is computed from the tenant's own records. Nothing is
  * generated, guessed or phrased by a language model — which is the point:
@@ -41,7 +41,7 @@ export interface Insight {
   href?: string;
 }
 
-const BENCHMARK = {
+export const BENCHMARK = {
   mortalityPct: 5,
   layPct: 85,
   fcr: 1.8,

@@ -2,112 +2,74 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
-import { CAN_SEE_MONEY, can, requireSession } from "@/lib/data/session";
-import { getDashboardData } from "@/lib/data/dashboard";
-import { getFlocks } from "@/lib/data/flocks";
-import { answerQuestion, titleFor } from "@/lib/ai/answer";
-import type { FlockMetrics } from "@/lib/database.types";
+import { requireSession } from "@/lib/data/session";
+import { loadAnalysisInput } from "@/lib/ai/load";
+import { deleteConversation, saveExchange } from "@/lib/ai/store";
+import { type Answer, answerQuestion, titleFor } from "@/lib/ai/answer";
+import { answerWithModel, modelAvailable } from "@/lib/ai/llm";
 
-export interface AskState {
-  error: string | null;
-}
+export type AskResult =
+  | { ok: true; answer: Answer; conversationId: string | null; saved: boolean }
+  | { ok: false; error: string };
 
 /**
- * Answers a question from the farm's records and saves both sides of the
- * exchange. The evidence behind each answer is stored with it, so a reply
- * read back in a month can still be traced to the numbers that produced it.
+ * Answer a question from this farm's own records, and keep the exchange.
+ * Called directly from the chat component rather than through a form
+ * submission, so asking a question no longer reloads the page.
  */
-export async function askAssistant(_prev: AskState, form: FormData): Promise<AskState> {
+export async function askAssistant(
+  question: string,
+  conversationId: string | null,
+  history: { role: "user" | "assistant"; body: string }[] = [],
+): Promise<AskResult> {
   const session = await requireSession();
-  const supabase = await createClient();
 
-  const question = String(form.get("question") ?? "").trim();
-  if (!question) return { error: "Type a question first." };
-  if (question.length > 1000) return { error: "That question is too long." };
+  const q = question.trim();
+  if (!q) return { ok: false, error: "Type a question first." };
+  if (q.length > 500) return { ok: false, error: "That question is too long — keep it under 500 characters." };
 
-  let conversationId = String(form.get("conversation_id") ?? "");
+  const input = await loadAnalysisInput(session);
 
-  if (!conversationId) {
-    const { data: created, error } = await supabase
-      .from("edoshatch360_ai_conversations")
-      .insert({
-        tenant_id: session.tenant.id,
-        user_id: session.user.id,
-        title: titleFor(question),
-      })
-      .select("id")
-      .single();
+  // The conversation so far, so a follow-up ("and last week?") is understood.
+  const earlier = (Array.isArray(history) ? history : [])
+    .filter((m) => (m?.role === "user" || m?.role === "assistant") && typeof m.body === "string")
+    .slice(-8)
+    .map((m) => ({ role: m.role, body: m.body.slice(0, 2000) }));
 
-    if (error || !created) return { error: "We couldn't start that conversation. Try again." };
-    conversationId = created.id;
+  // With a model configured, it takes every question — it can combine tools
+  // in ways nobody wrote a matcher for. Without one, or if it fails, the
+  // built-in answers stand in, so edos.ai never simply goes dark.
+  let answer: Answer;
+  if (modelAvailable()) {
+    try {
+      answer = await answerWithModel(q, earlier, input, session.tenant.name);
+    } catch (cause) {
+      console.error("edoshatch360: assistant model failed, using the built-in answers", cause);
+      answer = answerQuestion(q, input);
+    }
+  } else {
+    answer = answerQuestion(q, input);
   }
 
-  const [data, flocks] = await Promise.all([
-    getDashboardData(session.tenant.id),
-    getFlocks(session.tenant.id),
-  ]);
-
-  const metrics = await Promise.all(
-    flocks.map(async (flock) => {
-      const { data: m } = await supabase.rpc("edoshatch360_flock_metrics", { p_flock: flock.id });
-      return { flock, metrics: (m as FlockMetrics) ?? null };
-    }),
-  );
-
-  const answer = answerQuestion(question, {
-    data,
-    metrics,
-    currency: session.tenant.currency,
-    canSeeMoney: can(session.role, CAN_SEE_MONEY),
+  const id = await saveExchange({
+    tenantId: session.tenant.id,
+    userId: session.user.id,
+    conversationId,
+    title: titleFor(q),
+    question: q,
+    answer,
   });
 
-  const { error: insertError } = await supabase.from("edoshatch360_ai_messages").insert([
-    {
-      conversation_id: conversationId,
-      tenant_id: session.tenant.id,
-      role: "user",
-      body: question,
-      // Explicit, even though the column defaults to '[]'. In a multi-row
-      // insert PostgREST builds one column list from the union of the keys
-      // and sends NULL for whatever a row is missing — the default never
-      // applies, and the NOT NULL constraint rejects the whole batch.
-      evidence: [],
-    },
-    {
-      conversation_id: conversationId,
-      tenant_id: session.tenant.id,
-      role: "assistant",
-      body: answer.body,
-      evidence: {
-        evidence: answer.evidence,
-        insights: answer.insights,
-        needsVet: answer.needsVet ?? false,
-      },
-    },
-  ]);
-
-  if (insertError) {
-    // The reply is still shown; only the record of it failed. Log the real
-    // cause — this failure was invisible for weeks behind a friendly message.
-    console.error("edoshatch360: could not save assistant exchange", insertError);
-    return { error: "We couldn't save that exchange. Try again." };
-  }
-
-  // Bump the conversation so it sorts to the top of the saved list.
-  await supabase
-    .from("edoshatch360_ai_conversations")
-    .update({ updated_at: new Date().toISOString() })
-    .eq("id", conversationId);
-
-  revalidatePath("/app/assistant");
-  redirect(`/app/assistant?c=${conversationId}`);
+  if (id) revalidatePath("/app/assistant");
+  return { ok: true, answer, conversationId: id, saved: id !== null };
 }
 
-export async function deleteConversation(id: string) {
-  const supabase = await createClient();
-  // RLS restricts this to the caller's own conversations.
-  await supabase.from("edoshatch360_ai_conversations").delete().eq("id", id);
+export async function removeConversation(id: string): Promise<void> {
+  await requireSession();
+  await deleteConversation(id);
   revalidatePath("/app/assistant");
+  // A plain form submission (the sidebar's delete button needs no client
+  // JS), so leaving the now-deleted conversation's URL behind is handled
+  // here rather than by the page noticing it is gone.
   redirect("/app/assistant");
 }

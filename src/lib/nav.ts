@@ -84,7 +84,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Insight",
     items: [
-      { href: "/app/assistant", label: "Assistant", icon: Sparkles },
+      { href: "/app/assistant", label: "edos.ai", icon: Sparkles },
       { href: "/app/reports", label: "Reports", icon: FileText, advancedOnly: true, feature: "reports_export" },
       { href: "/app/analytics", label: "Analytics", icon: BarChart3, advancedOnly: true, feature: "benchmarking" },
     ],

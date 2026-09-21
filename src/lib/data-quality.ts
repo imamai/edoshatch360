@@ -5,7 +5,7 @@ import { formatNumber } from "@/lib/utils";
  * What counts as a believable day on a poultry farm.
  *
  * One module, three consumers: the entry form uses it to explain a bad number
- * before it is saved, the Assistant uses it to flag records already in the
+ * before it is saved, edos.ai uses it to flag records already in the
  * database, and migration 0023 mirrors the *impossible* half of it as
  * Postgres triggers. Keeping the thresholds here means the three can never
  * drift into disagreeing about what "too much feed" means.
