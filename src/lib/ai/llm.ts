@@ -1,5 +1,7 @@
 import { computeKpis, daySeries, expenseBreakdown, moneySeries } from "@/lib/data/dashboard";
 import { addDays, formatMoney, today } from "@/lib/utils";
+import { expectedWeightAt } from "@/lib/weight-benchmark";
+import { NAV_HELP } from "./navigation";
 import { BENCHMARK, analyseFarm, type AnalysisInput, type Insight } from "./insights";
 import type { Answer } from "./answer";
 
@@ -62,6 +64,13 @@ function flockByCode(i: AnalysisInput, query: string) {
 
 const TOOLS: Tool[] = [
   {
+    name: "app_navigation",
+    description: "Every screen in EDOS Hatch360 itself, its exact path and what it is for, plus who can reach it when that isn't everyone. Use this for questions about the app rather than the farm's data — 'where do I add a flock', 'how do I record today', 'where is inventory', 'can I see reports'.",
+    input_schema: { type: "object", properties: {} },
+    label: () => "How to navigate the app",
+    run: () => NAV_HELP,
+  },
+  {
     name: "farm_overview",
     description: "Birds, active flocks, mortality to date, eggs today, and this month's margin if this person can see money — the same figures the dashboard opens with.",
     input_schema: { type: "object", properties: {} },
@@ -98,7 +107,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: "flock_metrics",
-    description: "Full detail for one flock by its code or name: mortality, laying rate, feed conversion, average weight, days recorded and how complete the records are. Call flocks first if the code is not known.",
+    description: "Full detail for one flock by its code or name: mortality, laying rate, feed conversion, weight (average, and the highest/lowest from the same weighing when recorded) against its breed's published expected weight for its age where one is known, days recorded and how complete the records are. Call flocks first if the code is not known.",
     input_schema: { type: "object", properties: { flock: { type: "string" } }, required: ["flock"] },
     label: (inp) => `Metrics for ${inp.flock}`,
     vet: true,
@@ -106,9 +115,11 @@ const TOOLS: Tool[] = [
       const found = flockByCode(i, String(inp.flock ?? ""));
       if (!found || !found.metrics) return { error: "No active flock with that code or name." };
       const m = found.metrics;
+      const expected = expectedWeightAt(i.weightBenchmarks, found.flock.bird_type, found.flock.breed, m.age_days);
       return {
         code: found.flock.code,
         bird_type: found.flock.bird_type,
+        breed: found.flock.breed || undefined,
         age_days: m.age_days,
         placed: m.placed,
         current: m.current,
@@ -119,6 +130,14 @@ const TOOLS: Tool[] = [
         feed_kg: round(m.feed_kg),
         feed_last_7_kg: round(m.feed_last_7_kg),
         avg_weight_g: m.avg_weight_g,
+        weight_highest_g: m.weight_highest_g,
+        weight_lowest_g: m.weight_lowest_g,
+        expected_weight_g: expected
+          ? expected.lowGrams === expected.highGrams
+            ? `${expected.lowGrams}`
+            : `${expected.lowGrams}-${expected.highGrams}`
+          : "no published benchmark for this breed",
+        expected_weight_source: expected?.source,
         fcr: m.fcr,
         days_recorded: m.days_recorded,
         recording_rate_pct: m.days_recorded && m.age_days ? round((m.days_recorded / m.age_days) * 100) : null,
@@ -330,6 +349,7 @@ function systemPrompt(i: AnalysisInput, farmName: string): string {
     "Rules:",
     "- Every figure you give must come from a tool result in this conversation. Never estimate, extrapolate or invent a number. If the tools cannot answer, say what you can answer instead.",
     "- Call as many tools as you need, then answer. Use flocks first if you need a flock's exact code.",
+    "- For a question about the app itself rather than this farm's data — where a screen is, how to add or record something, whether a feature is visible to this person's role or plan — call app_navigation and answer from its list. Never guess a path or invent a screen that isn't in it.",
     "- Be brief and direct: lead with the answer in one or two sentences, then at most a short list, one item per line starting with \"• \". No markdown headings, bold or tables.",
     "- Speak plainly, the way you would to a farmer standing in front of you, not a spreadsheet.",
     // Spec §35 — carried over verbatim from the rule-based answers, and the

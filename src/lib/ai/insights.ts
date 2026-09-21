@@ -1,6 +1,6 @@
 import type { DashboardData } from "@/lib/data/dashboard";
 import { computeKpis, daySeries, expenseBreakdown, moneySeries } from "@/lib/data/dashboard";
-import type { Flock, FlockMetrics } from "@/lib/database.types";
+import type { Flock, FlockMetrics, WeightBenchmark } from "@/lib/database.types";
 import { addDays, formatMoney, formatNumber, formatPercent, today } from "@/lib/utils";
 import { LIMITS } from "@/lib/data-quality";
 
@@ -56,6 +56,9 @@ export interface AnalysisInput {
   metrics: { flock: Flock; metrics: FlockMetrics | null }[];
   currency: string;
   canSeeMoney: boolean;
+  /** Published breed growth curves, for comparing a flock's weight against
+   *  what its breed should weigh at its age — see lib/weight-benchmark.ts. */
+  weightBenchmarks: WeightBenchmark[];
 }
 
 /** Linear trend over a series; returns percent change per day. */

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { CAN_SEE_MONEY, can, type SessionContext } from "@/lib/data/session";
 import { getDashboardData } from "@/lib/data/dashboard";
 import { getFlocks } from "@/lib/data/flocks";
+import { getWeightBenchmarks } from "@/lib/data/weight-benchmarks";
 import type { AnalysisInput } from "./insights";
 import type { FlockMetrics } from "@/lib/database.types";
 
@@ -18,9 +19,10 @@ import type { FlockMetrics } from "@/lib/database.types";
 export async function loadAnalysisInput(session: SessionContext): Promise<AnalysisInput> {
   const supabase = await createClient();
 
-  const [data, flocks] = await Promise.all([
+  const [data, flocks, weightBenchmarks] = await Promise.all([
     getDashboardData(session.tenant.id),
     getFlocks(session.tenant.id),
+    getWeightBenchmarks(),
   ]);
 
   const metrics = await Promise.all(
@@ -35,5 +37,6 @@ export async function loadAnalysisInput(session: SessionContext): Promise<Analys
     metrics,
     currency: session.tenant.currency,
     canSeeMoney: can(session.role, CAN_SEE_MONEY),
+    weightBenchmarks,
   };
 }

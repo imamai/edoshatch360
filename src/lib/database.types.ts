@@ -536,6 +536,8 @@ export interface FlockMetrics {
   feed_last_7_kg: number;
   water_liters: number;
   avg_weight_g: number | null;
+  weight_highest_g: number | null;
+  weight_lowest_g: number | null;
   fcr: number | null;
   adg_g: number | null;
   days_recorded: number;

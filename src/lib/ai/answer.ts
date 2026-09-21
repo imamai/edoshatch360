@@ -1,5 +1,6 @@
 import type { AnalysisInput, Evidence, Insight } from "./insights";
 import { analyseFarm } from "./insights";
+import { NAV_HELP } from "./navigation";
 import { computeKpis, daySeries } from "@/lib/data/dashboard";
 import { addDays, formatMoney, formatNumber, formatPercent, today } from "@/lib/utils";
 
@@ -266,6 +267,22 @@ const MATCHERS: Matcher[] = [
         `${insights.length} thing${insights.length > 1 ? "s" : ""} in your records ${insights.length > 1 ? "are" : "is"} outside target. The most pressing is below.`,
       );
     },
+  },
+
+  /* ------------------------------------------------------- app itself -- */
+  // Deliberately last: a data matcher above (money, feed, mortality...)
+  // should win whenever a question could genuinely be either — "where is
+  // my money" is almost always asking how much, not which screen shows it.
+  {
+    keys: has("where is", "where's", "where can i", "where do i", "how do i add", "how do i record", "how do i find", "how do i create", "how do i invite", "which screen", "which page", "navigate"),
+    handler: () => ({
+      body: "Here is where to find things in EDOS Hatch360:",
+      evidence: NAV_HELP.map((n) => ({
+        label: n.label,
+        value: n.restricted ? `${n.path} — ${n.restricted}` : n.path,
+      })),
+      insights: [],
+    }),
   },
 ];
 
