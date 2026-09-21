@@ -15,10 +15,10 @@ import {
   Loader2,
   MessageSquarePlus,
   Stethoscope,
-  Trash2,
 } from "lucide-react";
-import { askAssistant, removeConversation } from "./actions";
-import { LogoMark } from "@/components/brand/logo";
+import { askAssistant } from "./actions";
+import { AssistantGlyph } from "@/components/app/assistant-glyph";
+import { NEW_CONVERSATION, THREAD_KEY, startNewConversation } from "@/lib/ai/new-conversation";
 import { Badge, type Tone } from "@/components/ui/badge";
 // From the client-safe constants module, not answer.ts — importing a value
 // out of the analysis engine would pull next/headers into the browser.
@@ -61,15 +61,6 @@ const TONE_CHIP: Record<InsightTone, string> = {
   neutral: "bg-info-soft text-info",
   good: "bg-good-soft text-good",
 };
-
-/** The Hatch360 mark, in a soft gold disc — edos.ai's own face on the page. */
-export function AssistantGlyph({ className }: { className?: string }) {
-  return (
-    <span className={cn("flex shrink-0 items-center justify-center rounded-full bg-gold/20 text-gold", className)}>
-      <LogoMark className="h-[60%] w-[60%]" />
-    </span>
-  );
-}
 
 // ── The figures behind an answer ────────────────────────────────────────────
 
@@ -240,8 +231,6 @@ function CopyAnswer({ body }: { body: string }) {
   );
 }
 
-const DRAFT_KEY = "edoshatch360:assistant-draft";
-
 /**
  * The chat itself.
  *
@@ -271,6 +260,19 @@ export function AssistantChat({
   const [, startTransition] = useTransition();
   const input = useRef<HTMLTextAreaElement>(null);
   const sequence = useRef(0);
+
+  // "New conversation" from the page header or the sidebar's history clears
+  // an unsaved thread here too, even though neither of those is this
+  // component.
+  useEffect(() => {
+    const clear = () => {
+      setMessages([]);
+      setCurrent(null);
+      setError(null);
+    };
+    window.addEventListener(NEW_CONVERSATION, clear);
+    return () => window.removeEventListener(NEW_CONVERSATION, clear);
+  }, []);
 
   async function ask(question: string) {
     const q = question.trim();
@@ -322,7 +324,7 @@ export function AssistantChat({
     restored.current = true;
     if (conversationId || initial.length) return;
     try {
-      const kept = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? "null") as ThreadMessage[] | null;
+      const kept = JSON.parse(sessionStorage.getItem(THREAD_KEY) ?? "null") as ThreadMessage[] | null;
       if (Array.isArray(kept) && kept.length) startTransition(() => setMessages(kept));
     } catch {
       /* storage blocked or corrupt — start fresh */
@@ -332,8 +334,8 @@ export function AssistantChat({
   useEffect(() => {
     if (!restored.current) return;
     try {
-      if (current || !messages.length) sessionStorage.removeItem(DRAFT_KEY);
-      else sessionStorage.setItem(DRAFT_KEY, JSON.stringify(messages.slice(-40)));
+      if (current || !messages.length) sessionStorage.removeItem(THREAD_KEY);
+      else sessionStorage.setItem(THREAD_KEY, JSON.stringify(messages.slice(-40)));
     } catch {
       /* storage unavailable — the thread still works for this visit */
     }
@@ -453,32 +455,26 @@ export function AssistantChat({
   );
 }
 
+/**
+ * Starts a fresh thread — a button rather than a plain link, because
+ * starting fresh means clearing the unsaved draft and telling any open chat
+ * to clear too (see lib/ai/new-conversation.ts), not just changing the URL.
+ * The sidebar's own "New conversation" row does the same thing.
+ */
 export function NewConversationButton() {
+  const router = useRouter();
   return (
-    <Link
-      href="/app/assistant"
+    <button
+      type="button"
       onClick={() => {
-        try {
-          sessionStorage.removeItem(DRAFT_KEY);
-        } catch {
-          /* storage unavailable */
-        }
+        startNewConversation();
+        router.push("/app/assistant");
       }}
       className="inline-flex h-10 items-center gap-2 rounded-lg border border-line-strong bg-surface px-3.5 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand"
     >
       <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
       New conversation
-    </Link>
-  );
-}
-
-export function DeleteConversationButton({ id }: { id: string }) {
-  return (
-    <form action={removeConversation.bind(null, id)}>
-      <button type="submit" aria-label="Delete this conversation" className="rounded p-1 text-ink-faint hover:text-critical">
-        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-      </button>
-    </form>
+    </button>
   );
 }
 

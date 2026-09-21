@@ -1,6 +1,8 @@
 import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { getTenantPlan } from "@/lib/data/plan";
 import { createClient } from "@/lib/supabase/server";
+import { listConversations } from "@/lib/ai/store";
+import { groupConversations } from "@/lib/ai/history";
 import { Sidebar } from "@/components/app/sidebar";
 import { Topbar } from "@/components/app/topbar";
 import { BottomNav } from "@/components/app/bottom-nav";
@@ -18,12 +20,18 @@ export default async function AppLayout({
   const canWrite = can(session.role, CAN_WRITE);
 
   const supabase = await createClient();
-  const { count } = await supabase
-    .from("edoshatch360_notifications")
-    .select("id", { count: "exact", head: true })
-    .eq("tenant_id", session.tenant.id)
-    .eq("is_read", false)
-    .eq("is_archived", false);
+  const [{ count }, conversations] = await Promise.all([
+    supabase
+      .from("edoshatch360_notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.tenant.id)
+      .eq("is_read", false)
+      .eq("is_archived", false),
+    // Read once here rather than again inside the assistant page: the
+    // sidebar lists these on every screen now, not only its own.
+    listConversations(),
+  ]);
+  const history = groupConversations(conversations);
 
   return (
     <OfflineProvider>
@@ -31,7 +39,14 @@ export default async function AppLayout({
       {/* .app-ui switches the working application onto its own typographic
           scale — see globals.css. The marketing site keeps its own. */}
       <div className="app-ui flex min-h-screen bg-canvas">
-        <Sidebar role={session.role} mode={session.mode} canWrite={canWrite} plan={plan.code} isPlatformAdmin={session.isPlatformAdmin} />
+        <Sidebar
+          role={session.role}
+          mode={session.mode}
+          canWrite={canWrite}
+          plan={plan.code}
+          isPlatformAdmin={session.isPlatformAdmin}
+          history={history}
+        />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar

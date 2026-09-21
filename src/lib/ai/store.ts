@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { Answer } from "./answer";
 import type { Evidence, Insight } from "./insights";
@@ -39,7 +40,13 @@ interface StoredEvidence {
   needsVet?: boolean;
 }
 
-export async function listConversations(): Promise<Conversation[]> {
+/**
+ * Wrapped in `cache()` — the same reasoning as `getSession` in
+ * `lib/data/session.ts` — because the sidebar now reads this on every page
+ * under `/app`, and the assistant page reads it again for itself in the same
+ * request. Without it, opening edos.ai would run the query twice.
+ */
+export const listConversations = cache(async (): Promise<Conversation[]> => {
   const supabase = await createClient();
   const { data } = await supabase
     .from("edoshatch360_ai_conversations")
@@ -49,7 +56,7 @@ export async function listConversations(): Promise<Conversation[]> {
     .returns<{ id: string; title: string; updated_at: string }[]>();
 
   return (data ?? []).map((c) => ({ id: c.id, title: c.title, updatedAt: c.updated_at }));
-}
+});
 
 export async function loadMessages(conversationId: string): Promise<StoredMessage[]> {
   const supabase = await createClient();

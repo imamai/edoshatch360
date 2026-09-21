@@ -9,16 +9,9 @@ import { analyseFarm } from "@/lib/ai/insights";
 import { modelAvailable } from "@/lib/ai/llm";
 import { greetingFor } from "@/lib/ai/greeting";
 
+import { AssistantGlyph } from "@/components/app/assistant-glyph";
 import { Badge } from "@/components/ui/badge";
-import {
-  AssistantChat,
-  AssistantGlyph,
-  DeleteConversationButton,
-  HowItWorks,
-  InsightCard,
-  NewConversationButton,
-  type ThreadMessage,
-} from "./assistant-ui";
+import { AssistantChat, HowItWorks, InsightCard, NewConversationButton, type ThreadMessage } from "./assistant-ui";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "edos.ai" };
@@ -30,6 +23,13 @@ export const metadata: Metadata = { title: "edos.ai" };
  * the Hatch360 mark and this farm's own records. A chat whose every answer is
  * worked out from the tenant's records with the figures shown, and an
  * Analysis tab that runs the full review without being asked.
+ *
+ * Saved conversations used to sit in a column beside the chat, and "how
+ * edos.ai works" sat under them — a fixed quarter of the width gone on every
+ * screen, on both tabs, whether or not anyone was reading either. The history
+ * now folds under edos.ai in the app's own sidebar, where the rest of the
+ * navigation already lives, so the conversation gets the whole width; "how it
+ * works" moved to the foot of the one tab it actually explains.
  */
 export default async function AssistantPage({
   searchParams,
@@ -95,78 +95,47 @@ export default async function AssistantPage({
         ))}
       </nav>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-[15rem_1fr] lg:items-start">
-        {/* ------------------------------------------- saved conversations -- */}
-        <aside className="order-2 flex flex-col gap-3 lg:order-1">
-          <h2 className="px-1 text-[0.6875rem] font-semibold tracking-[0.1em] text-ink-faint uppercase">Saved conversations</h2>
-
-          {conversations.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-line px-3 py-4 text-xs leading-relaxed text-ink-faint">
-              Nothing saved yet. Ask a question and it is kept here so you can come back to it.
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-1">
-              {conversations.map((c) => (
-                <li key={c.id} className="group flex items-center gap-1">
-                  <Link
-                    href={`/app/assistant?c=${c.id}`}
-                    className={cn(
-                      "min-w-0 flex-1 rounded-lg px-2.5 py-2 text-sm transition-colors",
-                      c.id === activeId ? "bg-brand-soft font-medium text-brand" : "text-ink-soft hover:bg-surface-sunk hover:text-ink",
-                    )}
-                  >
-                    <span className="block truncate">{c.title}</span>
-                  </Link>
-                  <DeleteConversationButton id={c.id} />
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <HowItWorks model={modelAvailable()} />
-        </aside>
-
-        {/* ------------------------------------------------------- main -- */}
-        <div className="order-1 lg:order-2">
-          {tab === "analysis" ? (
-            <div className="flex flex-col gap-4">
-              <div className="flex items-start gap-3 rounded-xl border border-line bg-surface p-4">
-                <AssistantGlyph className="h-8 w-8" />
-                <div>
-                  <p className="text-sm font-semibold text-ink">
-                    {insights.length} finding{insights.length === 1 ? "" : "s"} from your records
-                  </p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
-                    Every flock checked against the benchmark for its bird type, plus stock levels, the vaccination
-                    schedule and this month&apos;s figures.
-                  </p>
-                </div>
+      <div className="mt-5">
+        {tab === "analysis" ? (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start gap-3 rounded-xl border border-line bg-surface p-4">
+              <AssistantGlyph className="h-8 w-8" />
+              <div>
+                <p className="text-sm font-semibold text-ink">
+                  {insights.length} finding{insights.length === 1 ? "" : "s"} from your records
+                </p>
+                <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
+                  Every flock checked against the benchmark for its bird type, plus stock levels, the vaccination
+                  schedule and this month&apos;s figures.
+                </p>
               </div>
-
-              {insights.map((insight) => (
-                <InsightCard key={insight.id} insight={insight} />
-              ))}
-
-              <HowItWorks model={modelAvailable()} />
-
-              <p className="flex items-start gap-2 rounded-lg border border-line bg-surface-sunk px-3 py-2.5 text-xs leading-relaxed text-ink-soft">
-                <Stethoscope className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
-                <span>
-                  These are observations from your data. They are not a veterinary diagnosis, and nothing here
-                  replaces having someone look at the birds.
-                </span>
-              </p>
             </div>
-          ) : (
-            <AssistantChat
-              key={activeId ?? "new"}
-              conversationId={activeId ?? null}
-              initial={initial}
-              userName={session.user.full_name ?? session.user.email ?? "You"}
-              greeting={greetingFor(session.user.full_name ?? session.user.email ?? "")}
-            />
-          )}
-        </div>
+
+            {insights.map((insight) => (
+              <InsightCard key={insight.id} insight={insight} />
+            ))}
+
+            <p className="flex items-start gap-2 rounded-lg border border-line bg-surface-sunk px-3 py-2.5 text-xs leading-relaxed text-ink-soft">
+              <Stethoscope className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
+              <span>
+                These are observations from your data. They are not a veterinary diagnosis, and nothing here
+                replaces having someone look at the birds.
+              </span>
+            </p>
+
+            {/* Explains the tab it sits under, once — not carried on every
+                screen this page can show. */}
+            <HowItWorks model={modelAvailable()} />
+          </div>
+        ) : (
+          <AssistantChat
+            key={activeId ?? "new"}
+            conversationId={activeId ?? null}
+            initial={initial}
+            userName={session.user.full_name ?? session.user.email ?? "You"}
+            greeting={greetingFor(session.user.full_name ?? session.user.email ?? "")}
+          />
+        )}
       </div>
     </div>
   );

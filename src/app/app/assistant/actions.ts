@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/data/session";
 import { loadAnalysisInput } from "@/lib/ai/load";
@@ -68,8 +67,8 @@ export async function removeConversation(id: string): Promise<void> {
   await requireSession();
   await deleteConversation(id);
   revalidatePath("/app/assistant");
-  // A plain form submission (the sidebar's delete button needs no client
-  // JS), so leaving the now-deleted conversation's URL behind is handled
-  // here rather than by the page noticing it is gone.
-  redirect("/app/assistant");
+  // No redirect here: the sidebar's delete button lists these on every page,
+  // not only the assistant's own, and the caller — which knows whether the
+  // conversation just deleted is the one currently open — decides whether
+  // that means going somewhere else or just refreshing where it is.
 }
