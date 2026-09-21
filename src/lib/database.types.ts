@@ -168,6 +168,8 @@ export interface DailyRecord {
   feed_consumed_kg: number | null;
   water_consumed_liters: number | null;
   avg_weight_grams: number | null;
+  weight_highest_grams: number | null;
+  weight_lowest_grams: number | null;
   temperature_c: number | null;
   humidity_pct: number | null;
   notes: string | null;
@@ -175,6 +177,16 @@ export interface DailyRecord {
   recorded_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface WeightBenchmark {
+  id: string;
+  bird_type: BirdType;
+  breed: string;
+  age_days: number;
+  weight_low_grams: number;
+  weight_high_grams: number;
+  source: string;
 }
 
 export interface Vaccination {

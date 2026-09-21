@@ -8,6 +8,8 @@ import {
   computeStreak, flockAgeDays, getFlocks, getRecentRecords, getRecordForDate,
   laysEggs, BIRD_TYPE_LABEL,
 } from "@/lib/data/flocks";
+import { getWeightBenchmarks } from "@/lib/data/weight-benchmarks";
+import { expectedWeightAt } from "@/lib/weight-benchmark";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -99,13 +101,15 @@ export default async function RecordPage({
       ? params.date
       : today();
 
-  const [existing, recent] = await Promise.all([
+  const [existing, recent, benchmarks] = await Promise.all([
     getRecordForDate(flock.id, date),
     getRecentRecords(flock.id, 60),
+    getWeightBenchmarks(),
   ]);
 
   const streak = computeStreak(recent);
   const age = flockAgeDays(flock, date);
+  const expectedWeight = expectedWeightAt(benchmarks, flock.bird_type, flock.breed, age);
   const tips = bestPractices(flock.bird_type, age);
   const lastSeven = recent.slice(0, 7);
 
@@ -158,6 +162,8 @@ export default async function RecordPage({
           existing={existing}
           laysEggs={laysEggs(flock)}
           previousWeight={previousWeight}
+          expectedWeight={expectedWeight}
+          ageDays={age}
         />
 
         <aside className="flex flex-col gap-4">

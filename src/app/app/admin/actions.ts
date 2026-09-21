@@ -1,11 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/data/session";
 import type { PlanCode } from "@/lib/plans";
 import type { SubStatus } from "@/lib/database.types";
+
+/** Where a "View as" trip started, so "Stop viewing" knows where home is. */
+const RETURN_TENANT_COOKIE = "edoshatch360_admin_return_tenant";
 
 /**
  * Platform administration.
@@ -187,6 +192,44 @@ export async function setPlatformAdmin(
 }
 
 /* ----------------------------------------------------------- enquiries -- */
+
+/* -------------------------------------------------------------- view as -- */
+
+/**
+ * Look at one organisation's real screens as a support tool.
+ *
+ * Grants a temporary, read-only membership (see edoshatch360_admin_view_as)
+ * and switches into it — the same last_tenant_id flip an ordinary user gets
+ * from the tenant switcher. Redirects rather than returning AdminState,
+ * since the point is to leave this page and land inside the organisation.
+ */
+export async function viewAsTenant(tenantId: string): Promise<void> {
+  const session = await requireSession();
+  if (!session.isPlatformAdmin) {
+    throw new Error("That is not yours to use.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("edoshatch360_admin_view_as", { p_tenant: tenantId });
+  if (error) throw new Error("We couldn't open that organisation. Try again.");
+
+  // Only remembered on the first hop — jumping from one "View as" straight
+  // into another must not overwrite where the admin actually started.
+  const store = await cookies();
+  if (!session.isSupportView) {
+    store.set(RETURN_TENANT_COOKIE, session.tenant.id, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 4,
+    });
+  }
+
+  await supabase.from("edoshatch360_users").update({ last_tenant_id: tenantId }).eq("id", session.user.id);
+
+  revalidatePath("/app", "layout");
+  redirect("/app");
+}
 
 export async function setEnquiryHandled(id: string, handled: boolean): Promise<AdminState> {
   const g = await guard();

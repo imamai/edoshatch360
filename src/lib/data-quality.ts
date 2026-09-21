@@ -72,6 +72,8 @@ export interface DailyRecordValues {
   feedKg: number | null;
   waterLitres: number | null;
   weightGrams: number | null;
+  weightHighestGrams: number | null;
+  weightLowestGrams: number | null;
 }
 
 export interface FlockContext {
@@ -114,7 +116,7 @@ export function checkDailyRecord(
   const {
     recordDate, mortality, culls, birdsSold,
     eggsCollected, eggsBroken, eggsRejected,
-    feedKg, waterLitres, weightGrams,
+    feedKg, waterLitres, weightGrams, weightHighestGrams, weightLowestGrams,
   } = values;
 
   /* ------------------------------------------------------------ dates -- */
@@ -271,6 +273,52 @@ export function checkDailyRecord(
         why: `The last recorded average was ${n(flock.previousWeightGrams)} g. Birds losing weight point to feed, water or disease — or to a sample that was too small.`,
       });
     }
+  }
+
+  if (weightHighestGrams !== null && weightHighestGrams > LIMITS.weightGramsMax) {
+    issues.push({
+      field: "weight_highest_grams",
+      level: "error",
+      message: `${n(weightHighestGrams)} g is heavier than any farmed bird.`,
+      why: "Check the highest-weight figure — a 2 kg broiler is 2000.",
+    });
+  }
+
+  if (weightLowestGrams !== null && weightLowestGrams > LIMITS.weightGramsMax) {
+    issues.push({
+      field: "weight_lowest_grams",
+      level: "error",
+      message: `${n(weightLowestGrams)} g is heavier than any farmed bird.`,
+      why: "Check the lowest-weight figure — a 2 kg broiler is 2000.",
+    });
+  }
+
+  if (
+    weightHighestGrams !== null &&
+    weightLowestGrams !== null &&
+    weightLowestGrams > weightHighestGrams
+  ) {
+    issues.push({
+      field: "weight_lowest_grams",
+      level: "error",
+      message: `The lowest weight (${n(weightLowestGrams)} g) is higher than the highest (${n(weightHighestGrams)} g).`,
+      why: "Check which figure went in which box.",
+    });
+  }
+
+  if (
+    weightGrams !== null &&
+    weightHighestGrams !== null &&
+    weightLowestGrams !== null &&
+    weightLowestGrams <= weightHighestGrams &&
+    (weightGrams > weightHighestGrams || weightGrams < weightLowestGrams)
+  ) {
+    issues.push({
+      field: "avg_weight_grams",
+      level: "warning",
+      message: "The average falls outside the highest–lowest range entered.",
+      why: `You entered ${n(weightLowestGrams)}–${n(weightHighestGrams)} g as the range and ${n(weightGrams)} g as the average. Worth a second look before saving.`,
+    });
   }
 
   return issues.sort((a, b) => (a.level === b.level ? 0 : a.level === "error" ? -1 : 1));

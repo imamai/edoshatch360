@@ -11,7 +11,8 @@ import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StockTable } from "@/components/app/stock-table";
 import { FeedChart } from "@/components/charts/trend-charts";
-import { MovementForm, NewItemForm } from "../inventory/stock-forms";
+import { MovementForm } from "../inventory/stock-forms";
+import { ButtonLink } from "@/components/ui/button";
 import { formatMoney, formatNumber } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Feed" };
@@ -46,7 +47,12 @@ export default async function FeedPage() {
             Usually the largest single cost on a poultry farm — so it gets its own screen.
           </p>
         </div>
-        <NewItemForm defaultCategory="feed" lockCategory />
+        {/* Adding a new feed item happens on Inventory, not here — one
+            entry point for the same stock ledger, so the same bag of feed
+            can't be added twice under two names from two screens. */}
+        <ButtonLink href="/app/inventory" variant="secondary" size="sm">
+          Add a feed item
+        </ButtonLink>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

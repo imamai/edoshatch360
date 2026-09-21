@@ -39,6 +39,43 @@ export async function createInventoryItem(
 
   if (!name) return { error: "Give the item a name.", ok: null };
 
+  // Feed and Inventory both add stock through this same form (Feed pre-fills
+  // the category and Inventory leaves it open), so the same item can be
+  // reached from either screen with no way to see it was already added from
+  // the other. The same name in the same category is treated as the item
+  // that already exists, not a second copy of it — otherwise the same feed
+  // silently splits across two rows with two separate stock counts.
+  const { data: existing } = await supabase
+    .from("edoshatch360_inventory")
+    .select("id, name, unit, current_stock")
+    .eq("tenant_id", session.tenant.id)
+    .eq("category", category)
+    .ilike("name", name)
+    .maybeSingle();
+
+  if (existing) {
+    if (opening > 0) {
+      await supabase.from("edoshatch360_inventory_transactions").insert({
+        tenant_id: session.tenant.id,
+        item_id: existing.id,
+        txn_type: "adjustment",
+        quantity: opening,
+        unit_cost_cents: Math.round(Math.max(0, unitCost) * 100),
+        total_cents: Math.round(opening * Math.max(0, unitCost) * 100),
+        occurred_on: today(),
+        notes: "Added from the stock item form",
+      });
+    }
+    revalidatePath("/app/inventory");
+    revalidatePath("/app/feed");
+    return {
+      error: null,
+      ok: opening > 0
+        ? `${existing.name} was already tracked — added ${opening} ${existing.unit} to its stock instead of creating a duplicate.`
+        : `${existing.name} is already tracked — nothing new to add.`,
+    };
+  }
+
   const { data: item, error } = await supabase
     .from("edoshatch360_inventory")
     .insert({

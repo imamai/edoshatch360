@@ -162,6 +162,8 @@ export async function buildReportRows(
         "Feed (kg)": r.feed_consumed_kg,
         "Water (L)": r.water_consumed_liters,
         "Avg weight (g)": r.avg_weight_grams,
+        "Highest weight (g)": r.weight_highest_grams,
+        "Lowest weight (g)": r.weight_lowest_grams,
         "Recorded by": r.recorded_by ? (who.get(r.recorded_by) ?? "") : "",
         Notes: r.notes,
       })),

@@ -15,7 +15,8 @@ import {
   checkDailyRecord, hasErrors, type DataIssue,
 } from "@/lib/data-quality";
 import type { DailyRecord, Flock } from "@/lib/database.types";
-import { cn, today } from "@/lib/utils";
+import type { ExpectedWeight } from "@/lib/weight-benchmark";
+import { cn, today, formatNumber } from "@/lib/utils";
 
 interface SectionDef {
   key: "losses" | "eggs" | "feed" | "weight" | "notes";
@@ -54,6 +55,8 @@ export function RecordForm({
   existing,
   laysEggs,
   previousWeight = null,
+  expectedWeight = null,
+  ageDays,
 }: {
   tenantId: string;
   flock: Flock;
@@ -62,6 +65,10 @@ export function RecordForm({
   laysEggs: boolean;
   /** Last recorded average weight before this date, for a drop check. */
   previousWeight?: number | null;
+  /** This breed's published weight at this flock's age today, if known. */
+  expectedWeight?: ExpectedWeight | null;
+  /** The flock's age on `date`, computed server-side — shown beside expectedWeight. */
+  ageDays: number;
 }) {
   const router = useRouter();
   const { submitRecord, online } = useOffline();
@@ -116,6 +123,8 @@ export function RecordForm({
     const feedKg = visible.feed ? nullableNum(form, "feed_consumed_kg") : null;
     const waterLitres = visible.feed ? nullableNum(form, "water_consumed_liters") : null;
     const weightGrams = visible.weight ? nullableNum(form, "avg_weight_grams") : null;
+    const weightHighestGrams = visible.weight ? nullableNum(form, "weight_highest_grams") : null;
+    const weightLowestGrams = visible.weight ? nullableNum(form, "weight_lowest_grams") : null;
 
     // The same rules the database enforces, run here so the farmer gets a
     // sentence they can act on instead of a rejection after the fact — and so
@@ -125,7 +134,7 @@ export function RecordForm({
         recordDate: date,
         mortality, culls, birdsSold,
         eggsCollected, eggsBroken, eggsRejected,
-        feedKg, waterLitres, weightGrams,
+        feedKg, waterLitres, weightGrams, weightHighestGrams, weightLowestGrams,
       },
       {
         code: flock.code,
@@ -170,6 +179,8 @@ export function RecordForm({
         feed_consumed_kg: feedKg,
         water_consumed_liters: waterLitres,
         avg_weight_grams: weightGrams,
+        weight_highest_grams: weightHighestGrams,
+        weight_lowest_grams: weightLowestGrams,
         notes: String(form.get("notes") ?? "").trim() || null,
       },
     });
@@ -356,17 +367,52 @@ export function RecordForm({
               )}
 
               {section.key === "weight" && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <NumberInput
-                    label="Average bird weight"
-                    name="avg_weight_grams"
-                    unit="g"
-                    decimals
-                    min={0}
-                    defaultValue={existing?.avg_weight_grams ?? ""}
-                    placeholder="0"
-                    hint="Weigh a sample and enter the average"
-                  />
+                <div className="flex flex-col gap-3">
+                  {expectedWeight && (
+                    <p className="rounded-lg border border-line bg-surface-sunk px-3 py-2 text-xs leading-relaxed text-ink-soft">
+                      Expected for {flock.breed} at {ageDays} days:{" "}
+                      <span className="font-medium text-ink tnum">
+                        {expectedWeight.lowGrams === expectedWeight.highGrams
+                          ? `${formatNumber(expectedWeight.lowGrams)} g`
+                          : `${formatNumber(expectedWeight.lowGrams)}–${formatNumber(expectedWeight.highGrams)} g`}
+                      </span>
+                      {expectedWeight.extrapolated && " (nearest published age)"}
+                      <br />
+                      <span className="text-ink-faint">Source: {expectedWeight.source}</span>
+                    </p>
+                  )}
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <NumberInput
+                      label="Average bird weight"
+                      name="avg_weight_grams"
+                      unit="g"
+                      decimals
+                      min={0}
+                      defaultValue={existing?.avg_weight_grams ?? ""}
+                      placeholder="0"
+                      hint="Weigh a sample and enter the average"
+                    />
+                    <NumberInput
+                      label="Highest in the sample"
+                      name="weight_highest_grams"
+                      unit="g"
+                      decimals
+                      min={0}
+                      defaultValue={existing?.weight_highest_grams ?? ""}
+                      placeholder="0"
+                      hint="Optional"
+                    />
+                    <NumberInput
+                      label="Lowest in the sample"
+                      name="weight_lowest_grams"
+                      unit="g"
+                      decimals
+                      min={0}
+                      defaultValue={existing?.weight_lowest_grams ?? ""}
+                      placeholder="0"
+                      hint="Optional"
+                    />
+                  </div>
                 </div>
               )}
 

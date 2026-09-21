@@ -9,6 +9,7 @@ import { BottomNav } from "@/components/app/bottom-nav";
 import { OfflineProvider } from "@/components/app/offline-provider";
 import { RegisterServiceWorker } from "@/components/app/register-sw";
 import { TrialNotice } from "@/components/app/trial-notice";
+import { ViewAsBanner } from "@/components/app/view-as-banner";
 
 export default async function AppLayout({
   children,
@@ -59,6 +60,7 @@ export default async function AppLayout({
             unreadCount={count ?? 0}
           />
 
+          {session.isSupportView && <ViewAsBanner tenantName={session.tenant.name} />}
           <TrialNotice plan={plan} />
 
           {/* pb-24 on mobile clears the fixed bottom bar and the floating action. */}

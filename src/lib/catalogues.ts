@@ -18,6 +18,7 @@ export const OTHER = "__other__";
 
 export const FEED_TYPES = [
   { group: "Chicks & growers", items: [
+    "Chick crumble",
     "Chick mash (0–8 weeks)",
     "Chick & duck mash",
     "Growers mash (9–18 weeks)",
@@ -65,6 +66,10 @@ export const VACCINE_TYPES = [
     "Infectious bursal disease (Gumboro) — intermediate",
     "Infectious bursal disease (Gumboro) — intermediate plus",
     "Infectious bronchitis (IB) — H120",
+  ]},
+  { group: "Combination vaccines", items: [
+    "Corymune 4K",
+    "Corymune 7K",
   ]},
   { group: "Other diseases", items: [
     "Fowl pox",

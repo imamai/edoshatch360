@@ -28,6 +28,8 @@ export interface QueuedRecord {
     feed_consumed_kg: number | null;
     water_consumed_liters: number | null;
     avg_weight_grams: number | null;
+    weight_highest_grams: number | null;
+    weight_lowest_grams: number | null;
     notes: string | null;
   };
   status: "pending" | "syncing" | "failed";

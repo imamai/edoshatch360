@@ -15,6 +15,14 @@ export interface SessionContext {
   tenants: { id: string; name: string; role: Role }[];
   mode: FarmMode;
   isPlatformAdmin: boolean;
+  /**
+   * True when the active organisation is not one this platform admin
+   * actually belongs to — they are here through "View as" on the Platform
+   * page (see edoshatch360_admin_view_as), looking at a farm's real screens
+   * as a support tool. Read-only: the membership behind this is always role
+   * `viewer`, which CAN_WRITE already excludes.
+   */
+  isSupportView: boolean;
 }
 
 /**
@@ -46,7 +54,7 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
 
   const { data: memberships } = await supabase
     .from("edoshatch360_memberships")
-    .select("tenant_id, role, edoshatch360_tenants(id, name)")
+    .select("tenant_id, role, invited_by, edoshatch360_tenants(id, name)")
     .eq("user_id", authUser.id)
     .eq("status", "active");
 
@@ -80,6 +88,12 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
 
   if (!tenant) return null;
 
+  const activeMembership = memberships.find((m) => m.tenant_id === activeId);
+  const isSupportView =
+    (profile as AppUser).is_platform_admin &&
+    activeMembership?.role === "viewer" &&
+    activeMembership?.invited_by === authUser.id;
+
   return {
     user: profile as AppUser,
     tenant: tenant as Tenant,
@@ -88,6 +102,7 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
     tenants: list,
     mode: (tenant as Tenant).mode,
     isPlatformAdmin: (profile as AppUser).is_platform_admin,
+    isSupportView,
   };
 });
 

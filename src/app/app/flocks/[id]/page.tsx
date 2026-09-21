@@ -11,6 +11,8 @@ import {
   BIRD_TYPE_LABEL, FLOCK_STATUS_LABEL, flockAgeDays, getFlock, getFlockHealth,
   getFlockMetrics, getRecentRecords,
 } from "@/lib/data/flocks";
+import { getWeightBenchmarks } from "@/lib/data/weight-benchmarks";
+import { expectedWeightAt } from "@/lib/weight-benchmark";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
@@ -60,14 +62,16 @@ export default async function FlockPage({
   const flock = await getFlock(id);
   if (!flock) notFound();
 
-  const [metrics, records, health] = await Promise.all([
+  const [metrics, records, health, benchmarks] = await Promise.all([
     getFlockMetrics(id),
     getRecentRecords(id, 60),
     getFlockHealth(id),
+    getWeightBenchmarks(),
   ]);
 
   const age = flockAgeDays(flock);
   const stages = timeline(age, flock.bird_type);
+  const expectedWeight = expectedWeightAt(benchmarks, flock.bird_type, flock.breed, age);
 
   // Daily series for the last 14 days, from the records already fetched.
   const series = Array.from({ length: 14 }, (_, i) => {
@@ -192,6 +196,21 @@ export default async function FlockPage({
           tone="info"
         />
       </div>
+
+      {expectedWeight && (
+        <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-ink-faint">
+          <Scale className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Expected for {flock.breed} at day {age}:{" "}
+            <span className="font-medium text-ink-soft tnum">
+              {expectedWeight.lowGrams === expectedWeight.highGrams
+                ? `${formatNumber(expectedWeight.lowGrams)} g`
+                : `${formatNumber(expectedWeight.lowGrams)}–${formatNumber(expectedWeight.highGrams)} g`}
+            </span>
+            {expectedWeight.extrapolated && " (nearest published age)"} — Source: {expectedWeight.source}
+          </span>
+        </p>
+      )}
 
       {/* --------------------------------------------------------- charts -- */}
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -339,7 +358,7 @@ export default async function FlockPage({
             />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[38rem] text-sm">
+              <table className="w-full min-w-[44rem] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-xs text-ink-faint">
                     <th scope="col" className="px-4 py-2.5 font-medium sm:px-5">Date</th>
@@ -347,7 +366,8 @@ export default async function FlockPage({
                     <th scope="col" className="px-3 py-2.5 text-right font-medium">Culls</th>
                     <th scope="col" className="px-3 py-2.5 text-right font-medium">Eggs</th>
                     <th scope="col" className="px-3 py-2.5 text-right font-medium">Feed (kg)</th>
-                    <th scope="col" className="px-4 py-2.5 text-right font-medium sm:px-5">Weight (g)</th>
+                    <th scope="col" className="px-3 py-2.5 text-right font-medium">Weight (g)</th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-medium sm:px-5">Range (g)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -371,9 +391,14 @@ export default async function FlockPage({
                           ? formatNumber(Number(r.feed_consumed_kg), { decimals: 1 })
                           : "—"}
                       </td>
-                      <td className="px-4 py-2.5 text-right tnum sm:px-5">
+                      <td className="px-3 py-2.5 text-right tnum">
                         {r.avg_weight_grams !== null
                           ? formatNumber(Number(r.avg_weight_grams))
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-right tnum sm:px-5">
+                        {r.weight_lowest_grams !== null && r.weight_highest_grams !== null
+                          ? `${formatNumber(Number(r.weight_lowest_grams))}–${formatNumber(Number(r.weight_highest_grams))}`
                           : "—"}
                       </td>
                     </tr>

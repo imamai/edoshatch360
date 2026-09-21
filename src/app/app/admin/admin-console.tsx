@@ -2,11 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Building2, CheckCircle2, Mail, ShieldCheck, Users } from "lucide-react";
+import { AlertTriangle, Building2, CheckCircle2, Eye, Mail, ShieldCheck, Users } from "lucide-react";
 
 import {
   extendTrial, setEnquiryHandled, setPlatformAdmin, setSubscriptionStatus, setTenantPlan,
-  type AdminState,
+  viewAsTenant, type AdminState,
 } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -273,6 +273,16 @@ export function AdminConsole({
                   >
                     Extend trial 30 days
                   </Button>
+
+                  {/* Opens their real screens read-only, as a support tool —
+                      see edoshatch360_admin_view_as. Not wired through run()
+                      because this redirects rather than returning a result. */}
+                  <form action={viewAsTenant.bind(null, o.id)} className="ml-auto">
+                    <Button type="submit" size="sm" variant="ghost">
+                      <Eye className="h-4 w-4" />
+                      View as
+                    </Button>
+                  </form>
                 </div>
               </CardBody>
             </Card>
