@@ -2,6 +2,7 @@ import { computeKpis, daySeries, expenseBreakdown, moneySeries } from "@/lib/dat
 import { addDays, formatMoney, today } from "@/lib/utils";
 import { expectedWeightAt } from "@/lib/weight-benchmark";
 import { NAV_HELP } from "./navigation";
+import { GLOSSARY } from "./glossary";
 import { BENCHMARK, analyseFarm, type AnalysisInput, type Insight } from "./insights";
 import type { Answer } from "./answer";
 
@@ -69,6 +70,13 @@ const TOOLS: Tool[] = [
     input_schema: { type: "object", properties: {} },
     label: () => "How to navigate the app",
     run: () => NAV_HELP,
+  },
+  {
+    name: "app_glossary",
+    description: "Plain-word definitions of terms and abbreviations used in EDOS Hatch360 — FCR, hen-day production, culls vs mortality, recording rate, opening stock, reorder level, roles, and so on. Use this when asked what a term means or the difference between two of them.",
+    input_schema: { type: "object", properties: {} },
+    label: () => "Glossary",
+    run: () => GLOSSARY,
   },
   {
     name: "farm_overview",
@@ -350,6 +358,7 @@ function systemPrompt(i: AnalysisInput, farmName: string): string {
     "- Every figure you give must come from a tool result in this conversation. Never estimate, extrapolate or invent a number. If the tools cannot answer, say what you can answer instead.",
     "- Call as many tools as you need, then answer. Use flocks first if you need a flock's exact code.",
     "- For a question about the app itself rather than this farm's data — where a screen is, how to add or record something, whether a feature is visible to this person's role or plan — call app_navigation and answer from its list. Never guess a path or invent a screen that isn't in it.",
+    "- For a question about what a term or abbreviation means — FCR, hen-day production, culls versus mortality, and so on — call app_glossary and answer from its list. Never define a term from your own general knowledge if it isn't in that list; say you don't have a definition for it instead.",
     "- Be brief and direct: lead with the answer in one or two sentences, then at most a short list, one item per line starting with \"• \". No markdown headings, bold or tables.",
     "- Speak plainly, the way you would to a farmer standing in front of you, not a spreadsheet.",
     // Spec §35 — carried over verbatim from the rule-based answers, and the

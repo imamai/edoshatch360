@@ -1,6 +1,7 @@
 import type { AnalysisInput, Evidence, Insight } from "./insights";
 import { analyseFarm } from "./insights";
 import { NAV_HELP } from "./navigation";
+import { GLOSSARY } from "./glossary";
 import { computeKpis, daySeries } from "@/lib/data/dashboard";
 import { addDays, formatMoney, formatNumber, formatPercent, today } from "@/lib/utils";
 
@@ -43,6 +44,19 @@ function fromInsights(insights: Insight[], intro: string): Answer {
 }
 
 const MATCHERS: Matcher[] = [
+  /* --------------------------------------------------------- glossary -- */
+  // Checked first: "define mortality" or "what does FCR mean" must not fall
+  // through to the mortality or FCR-adjacent data matchers below just
+  // because the term appears in both the question and their keyword list.
+  {
+    keys: has("what does", "meaning of", "define", "definition of", "difference between", "what's fcr", "what is fcr"),
+    handler: () => ({
+      body: "Here is what these terms mean in EDOS Hatch360:",
+      evidence: GLOSSARY.map((g) => ({ label: g.term, value: g.meaning })),
+      insights: [],
+    }),
+  },
+
   /* ------------------------------------------------------------ money -- */
   {
     keys: has("money", "profit", "margin", "revenue", "earning", "loss", "income", "finance"),
