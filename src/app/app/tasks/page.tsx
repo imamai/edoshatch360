@@ -1,29 +1,23 @@
 import type { Metadata } from "next";
 import { CalendarClock, CheckCircle2, ListChecks, TriangleAlert } from "lucide-react";
 
-import { requireSession } from "@/lib/data/session";
+import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
 import { getFlocks } from "@/lib/data/flocks";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
-import { Badge, type Tone } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ReopenButton, TaskForm, TaskToggle } from "./task-ui";
+import { ReopenButton, TaskForm } from "./task-ui";
+import { TaskRow, DeleteDoneTask } from "./task-row";
 import { relativeDay, today } from "@/lib/utils";
-import type { AppUser, Priority, Task } from "@/lib/database.types";
+import type { AppUser, Task } from "@/lib/database.types";
 
 export const metadata: Metadata = { title: "Tasks" };
 
-const PRIORITY_TONE: Record<Priority, Tone> = {
-  low: "neutral",
-  normal: "info",
-  high: "attention",
-  urgent: "critical",
-};
-
 export default async function TasksPage() {
   const session = await requireSession();
+  const canManage = can(session.role, CAN_WRITE);
   const supabase = await createClient();
 
   const [taskRes, memberRes, flocks] = await Promise.all([
@@ -110,43 +104,18 @@ export default async function TasksPage() {
                 />
               ) : (
                 <ul className="divide-y divide-line">
-                  {[...overdue, ...open.filter((x) => !overdue.includes(x))].map((task) => {
-                    const late = task.due_date && task.due_date < t;
-                    return (
-                      <li key={task.id} className="flex items-start gap-3 px-4 py-3 sm:px-5">
-                        <div className="pt-0.5">
-                          <TaskToggle id={task.id} done={false} title={task.title} />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-ink">{task.title}</p>
-                          <p className="mt-0.5 text-xs text-ink-faint">
-                            {task.due_date ? relativeDay(task.due_date) : "No due date"}
-                            {task.assignee_id
-                              ? ` · ${personName.get(task.assignee_id) ?? "Assigned"}`
-                              : ""}
-                            {task.flock_id ? ` · ${flockCode.get(task.flock_id) ?? ""}` : ""}
-                          </p>
-                          {task.description && (
-                            <p className="mt-1 text-xs leading-relaxed text-ink-soft">
-                              {task.description}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="flex shrink-0 flex-col items-end gap-1">
-                          <Badge tone={late ? "critical" : PRIORITY_TONE[task.priority]} dot>
-                            {late ? "Overdue" : task.priority}
-                          </Badge>
-                          {task.category && (
-                            <span className="text-[0.6875rem] text-ink-faint">
-                              {task.category}
-                            </span>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
+                  {[...overdue, ...open.filter((x) => !overdue.includes(x))].map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      late={Boolean(task.due_date && task.due_date < t)}
+                      personName={task.assignee_id ? (personName.get(task.assignee_id) ?? "Assigned") : null}
+                      flockCode={task.flock_id ? (flockCode.get(task.flock_id) ?? null) : null}
+                      people={people}
+                      flocks={flocks}
+                      canManage={canManage}
+                    />
+                  ))}
                 </ul>
               )}
             </CardBody>
@@ -170,7 +139,10 @@ export default async function TasksPage() {
                           {task.completed_at ? relativeDay(task.completed_at) : ""}
                         </p>
                       </div>
-                      <ReopenButton id={task.id} />
+                      <span className="flex items-center gap-2">
+                        <ReopenButton id={task.id} />
+                        {canManage && <DeleteDoneTask id={task.id} title={task.title} />}
+                      </span>
                     </li>
                   ))}
                 </ul>
