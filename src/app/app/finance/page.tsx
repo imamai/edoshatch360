@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Coins, PieChart, Receipt, TrendingDown, TrendingUp } from "lucide-react";
 
-import { CAN_SEE_MONEY, can, requireSession } from "@/lib/data/session";
+import { CAN_SEE_MONEY, CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import {
   computeKpis, expenseBreakdown, getDashboardData, moneySeries,
 } from "@/lib/data/dashboard";
@@ -11,10 +11,10 @@ import { getFlocks } from "@/lib/data/flocks";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Badge } from "@/components/ui/badge";
 import { BreakdownDonut, RevenueExpenseChart } from "@/components/charts/trend-charts";
 import { ExpenseForm } from "./expense-form";
-import { formatMoney, formatPercent, relativeDay } from "@/lib/utils";
+import { ExpenseRow } from "./expense-row";
+import { formatMoney, formatPercent } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Finance" };
 
@@ -24,6 +24,7 @@ export default async function FinancePage() {
   // Workers and supervisors have no business on this screen; RLS would let
   // them read the rows, so the restriction is enforced here as well.
   if (!can(session.role, CAN_SEE_MONEY)) notFound();
+  const canManage = can(session.role, CAN_WRITE) && can(session.role, CAN_SEE_MONEY);
 
   const [data, flocks] = await Promise.all([
     getDashboardData(session.tenant.id),
@@ -133,24 +134,7 @@ export default async function FinancePage() {
             ) : (
               <ul className="divide-y divide-line">
                 {recentExpenses.map((e) => (
-                  <li
-                    key={e.id}
-                    className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-ink">{e.description}</p>
-                      <p className="text-xs text-ink-faint">
-                        {relativeDay(e.expense_date)}
-                        {e.vendor ? ` · ${e.vendor}` : ""}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2.5">
-                      <Badge tone="neutral">{e.category.replace(/_/g, " ")}</Badge>
-                      <span className="text-sm font-semibold text-ink tnum">
-                        {formatMoney(e.amount_cents, { currency })}
-                      </span>
-                    </div>
-                  </li>
+                  <ExpenseRow key={e.id} expense={e} currency={currency} canManage={canManage} />
                 ))}
               </ul>
             )}

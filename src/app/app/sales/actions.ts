@@ -641,6 +641,157 @@ export async function createCustomer(
   return { error: null, ok: `${name} added.` };
 }
 
+/** Correct a customer's details — a wrong phone number, a renamed business. */
+export async function updateCustomer(
+  _prev: SaleFormState,
+  form: FormData,
+): Promise<SaleFormState> {
+  const session = await requireSession();
+  if (!canManageMoney(session.role)) {
+    return { error: "Your account cannot change customers.", ok: null };
+  }
+
+  const id = String(form.get("id") ?? "");
+  const name = String(form.get("name") ?? "").trim();
+  if (!id) return { error: "That customer could not be found.", ok: null };
+  if (!name) return { error: "What is the customer called?", ok: null };
+
+  const supabase = await createClient();
+
+  const { data: before } = await supabase
+    .from("edoshatch360_customers")
+    .select("*")
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .maybeSingle();
+  if (!before) return { error: "That customer could not be found.", ok: null };
+
+  const after = {
+    name,
+    phone: String(form.get("phone") ?? "").trim() || null,
+    email: String(form.get("email") ?? "").trim() || null,
+    location: String(form.get("location") ?? "").trim() || null,
+    customer_type: (String(form.get("customer_type") ?? "individual") ||
+      "individual") as CustomerType,
+    credit_limit_cents: Math.round(Number(form.get("credit_limit") ?? 0) * 100),
+    notes: String(form.get("notes") ?? "").trim() || null,
+  };
+
+  const { error } = await supabase
+    .from("edoshatch360_customers")
+    .update(after)
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't save that change. Try again.", ok: null };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "customer.updated",
+    entityType: "customer",
+    entityId: id,
+    before,
+    after,
+  });
+
+  revalidatePath("/app/customers");
+  revalidatePath("/app/sales");
+  return { error: null, ok: `${name} updated.` };
+}
+
+/** Take a customer out of the picker without losing what they have bought. */
+export async function setCustomerActive(id: string, active: boolean): Promise<SaleFormState> {
+  const session = await requireSession();
+  if (!canManageMoney(session.role)) {
+    return { error: "Your account cannot change customers.", ok: null };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("edoshatch360_customers")
+    .update({ is_active: active })
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .select("name")
+    .maybeSingle();
+
+  if (error || !data) return { error: "We couldn't change that customer. Try again.", ok: null };
+
+  revalidatePath("/app/customers");
+  revalidatePath("/app/sales");
+  return {
+    error: null,
+    ok: active ? `${data.name} is back in the customer list.` : `${data.name} archived.`,
+  };
+}
+
+/**
+ * Delete a customer outright.
+ *
+ * Blocked the moment they have a single sale on record: edoshatch360_sales
+ * only ever stores customer_id, never a name or phone captured at the time —
+ * unlike a deleted product, whose past lines keep their own description and
+ * price, deleting a customer with sales would leave those documents with no
+ * trace of who they were for at all. Archiving is the only option from
+ * there; a customer who has never bought anything can be removed cleanly.
+ */
+export async function deleteCustomer(id: string): Promise<SaleFormState> {
+  const session = await requireSession();
+  if (!canManageMoney(session.role)) {
+    return { error: "Your account cannot delete customers.", ok: null };
+  }
+
+  const supabase = await createClient();
+
+  const [{ data: customer }, { count: saleCount }] = await Promise.all([
+    supabase
+      .from("edoshatch360_customers")
+      .select("name")
+      .eq("id", id)
+      .eq("tenant_id", session.tenant.id)
+      .maybeSingle(),
+    supabase
+      .from("edoshatch360_sales")
+      .select("id", { count: "exact", head: true })
+      .eq("customer_id", id),
+  ]);
+
+  if (!customer) return { error: "That customer could not be found.", ok: null };
+  if ((saleCount ?? 0) > 0) {
+    return {
+      error: `${customer.name} has ${saleCount} document${saleCount === 1 ? "" : "s"} on record. Deleting would leave them with no customer at all — archive instead.`,
+      ok: null,
+    };
+  }
+
+  const { error } = await supabase
+    .from("edoshatch360_customers")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't delete that customer. Try again.", ok: null };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "customer.deleted",
+    entityType: "customer",
+    entityId: id,
+    before: customer,
+  });
+
+  revalidatePath("/app/customers");
+  return { error: null, ok: `${customer.name} deleted.` };
+}
+
 /* ------------------------------------------------------------- counter -- */
 
 export interface CounterLine {

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { AlertTriangle, Phone, Users, Wallet } from "lucide-react";
+import { AlertTriangle, Users, Wallet } from "lucide-react";
 
-import { CAN_SEE_MONEY, can, requireSession } from "@/lib/data/session";
+import { CAN_SEE_MONEY, CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantPlan } from "@/lib/data/plan";
 import { featureFrom } from "@/lib/plans";
@@ -10,10 +10,10 @@ import { UpgradeNotice } from "@/components/app/upgrade-notice";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { BreakdownDonut } from "@/components/charts/trend-charts";
 import { CustomerForm } from "./customer-form";
+import { CustomerRow } from "./customer-row";
 import { formatMoney, formatNumber } from "@/lib/utils";
 import type { Customer, Sale } from "@/lib/database.types";
 
@@ -28,14 +28,17 @@ export default async function CustomersPage() {
     return <UpgradeNotice what="Customers" from={featureFrom("invoicing")} />;
   }
   if (!can(session.role, CAN_SEE_MONEY)) notFound();
+  const canManage = can(session.role, CAN_WRITE) && can(session.role, CAN_SEE_MONEY);
 
   const supabase = await createClient();
   const [customerRes, saleRes] = await Promise.all([
+    // Archived customers stay listed, with their own badge — they still owe
+    // whatever they owed, and a row that vanishes on archive would make the
+    // restore button unreachable.
     supabase
       .from("edoshatch360_customers")
       .select("*")
       .eq("tenant_id", session.tenant.id)
-      .eq("is_active", true)
       .order("name"),
     supabase
       .from("edoshatch360_sales")
@@ -154,6 +157,7 @@ export default async function CustomersPage() {
                       <th scope="col" className="px-3 py-2.5 text-right font-medium">Orders</th>
                       <th scope="col" className="px-3 py-2.5 text-right font-medium">Spent</th>
                       <th scope="col" className="px-4 py-2.5 text-right font-medium sm:px-5">Owes</th>
+                      {canManage && <th scope="col" className="px-3 py-2.5" />}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
@@ -161,43 +165,16 @@ export default async function CustomersPage() {
                       const s = stats.get(c.id);
                       const over = c.credit_limit_cents > 0 && (s?.owed ?? 0) > c.credit_limit_cents;
                       return (
-                        <tr key={c.id} className="hover:bg-surface-sunk">
-                          <td className="px-4 py-3 sm:px-5">
-                            <span className="block font-medium text-ink">{c.name}</span>
-                            {c.phone && (
-                              <a
-                                href={`tel:${c.phone}`}
-                                className="inline-flex items-center gap-1 text-xs text-ink-faint hover:text-brand"
-                              >
-                                <Phone className="h-3 w-3" />
-                                {c.phone}
-                              </a>
-                            )}
-                          </td>
-                          <td className="px-3 py-3">
-                            <Badge tone="neutral">{c.customer_type.replace(/_/g, " ")}</Badge>
-                          </td>
-                          <td className="px-3 py-3 text-right text-ink-soft tnum">
-                            {s?.orders ?? 0}
-                          </td>
-                          <td className="px-3 py-3 text-right font-medium tnum">
-                            {formatMoney(s?.spent ?? 0, { currency })}
-                          </td>
-                          <td className="px-4 py-3 text-right sm:px-5">
-                            {(s?.owed ?? 0) > 0 ? (
-                              <span
-                                className={`font-medium tnum ${over ? "text-critical" : "text-attention"}`}
-                              >
-                                {formatMoney(s?.owed ?? 0, { currency })}
-                                {over && (
-                                  <span className="ml-1 text-[0.6875rem]">over limit</span>
-                                )}
-                              </span>
-                            ) : (
-                              <span className="text-ink-faint">—</span>
-                            )}
-                          </td>
-                        </tr>
+                        <CustomerRow
+                          key={c.id}
+                          customer={c}
+                          currency={currency}
+                          orders={s?.orders ?? 0}
+                          spent={s?.spent ?? 0}
+                          owed={s?.owed ?? 0}
+                          over={over}
+                          canManage={canManage}
+                        />
                       );
                     })}
                   </tbody>
