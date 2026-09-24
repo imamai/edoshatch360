@@ -67,14 +67,15 @@ export async function getRecentRecords(
   return (data ?? []) as DailyRecord[];
 }
 
-export async function getHouses(tenantId: string): Promise<House[]> {
+export async function getHouses(
+  tenantId: string,
+  /** Archived houses too — only the farms management screen wants these. */
+  includeInactive = false,
+): Promise<House[]> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("edoshatch360_houses")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .eq("is_active", true)
-    .order("name");
+  let query = supabase.from("edoshatch360_houses").select("*").eq("tenant_id", tenantId).order("name");
+  if (!includeInactive) query = query.eq("is_active", true);
+  const { data } = await query;
   return (data ?? []) as House[];
 }
 

@@ -9,7 +9,7 @@ import {
 import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import {
   BIRD_TYPE_LABEL, FLOCK_STATUS_LABEL, flockAgeDays, getFlock, getFlockHealth,
-  getFlockMetrics, getRecentRecords,
+  getFlockMetrics, getHouses, getRecentRecords,
 } from "@/lib/data/flocks";
 import { getWeightBenchmarks } from "@/lib/data/weight-benchmarks";
 import { expectedWeightAt } from "@/lib/weight-benchmark";
@@ -21,6 +21,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { EggTrendChart, FeedChart, MortalityChart } from "@/components/charts/trend-charts";
 import { DailyRecordRow } from "./daily-record-row";
+import { FlockActions } from "./flock-actions";
 import { addDays, formatMoney, formatNumber, formatPercent, relativeDay, today } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Flock" };
@@ -64,11 +65,12 @@ export default async function FlockPage({
   const flock = await getFlock(id);
   if (!flock) notFound();
 
-  const [metrics, records, health, benchmarks] = await Promise.all([
+  const [metrics, records, health, benchmarks, houses] = await Promise.all([
     getFlockMetrics(id),
     getRecentRecords(id, 60),
     getFlockHealth(id),
     getWeightBenchmarks(),
+    getHouses(session.tenant.id),
   ]);
 
   const age = flockAgeDays(flock);
@@ -121,6 +123,10 @@ export default async function FlockPage({
           <ClipboardList className="h-4 w-4" />
           Record data
         </ButtonLink>
+      </div>
+
+      <div className="mt-3">
+        <FlockActions flock={flock} houses={houses} canManage={canManage} />
       </div>
 
       {/* ------------------------------------------------------- timeline -- */}
