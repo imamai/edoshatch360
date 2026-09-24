@@ -6,7 +6,7 @@ import {
   Syringe, TrendingUp, Wheat,
 } from "lucide-react";
 
-import { requireSession } from "@/lib/data/session";
+import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import {
   BIRD_TYPE_LABEL, FLOCK_STATUS_LABEL, flockAgeDays, getFlock, getFlockHealth,
   getFlockMetrics, getRecentRecords,
@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { EggTrendChart, FeedChart, MortalityChart } from "@/components/charts/trend-charts";
+import { DailyRecordRow } from "./daily-record-row";
 import { addDays, formatMoney, formatNumber, formatPercent, relativeDay, today } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Flock" };
@@ -56,8 +57,9 @@ export default async function FlockPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
   const { id } = await params;
+  const canManage = can(session.role, CAN_WRITE);
 
   const flock = await getFlock(id);
   if (!flock) notFound();
@@ -368,40 +370,12 @@ export default async function FlockPage({
                     <th scope="col" className="px-3 py-2.5 text-right font-medium">Feed (kg)</th>
                     <th scope="col" className="px-3 py-2.5 text-right font-medium">Weight (g)</th>
                     <th scope="col" className="px-4 py-2.5 text-right font-medium sm:px-5">Range (g)</th>
+                    {canManage && <th scope="col" className="px-3 py-2.5" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
                   {records.slice(0, 20).map((r) => (
-                    <tr key={r.id} className="hover:bg-surface-sunk">
-                      <td className="px-4 py-2.5 sm:px-5">
-                        <Link
-                          href={`/app/record?flock=${flock.id}&date=${r.record_date}`}
-                          className="font-medium text-ink hover:text-brand"
-                        >
-                          {r.record_date}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2.5 text-right tnum">{r.mortality || "—"}</td>
-                      <td className="px-3 py-2.5 text-right tnum">{r.culls || "—"}</td>
-                      <td className="px-3 py-2.5 text-right tnum">
-                        {r.eggs_collected !== null ? formatNumber(r.eggs_collected) : "—"}
-                      </td>
-                      <td className="px-3 py-2.5 text-right tnum">
-                        {r.feed_consumed_kg !== null
-                          ? formatNumber(Number(r.feed_consumed_kg), { decimals: 1 })
-                          : "—"}
-                      </td>
-                      <td className="px-3 py-2.5 text-right tnum">
-                        {r.avg_weight_grams !== null
-                          ? formatNumber(Number(r.avg_weight_grams))
-                          : "—"}
-                      </td>
-                      <td className="px-4 py-2.5 text-right tnum sm:px-5">
-                        {r.weight_lowest_grams !== null && r.weight_highest_grams !== null
-                          ? `${formatNumber(Number(r.weight_lowest_grams))}–${formatNumber(Number(r.weight_highest_grams))}`
-                          : "—"}
-                      </td>
-                    </tr>
+                    <DailyRecordRow key={r.id} record={r} flock={flock} canManage={canManage} />
                   ))}
                 </tbody>
               </table>
