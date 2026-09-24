@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireSession } from "@/lib/data/session";
+import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
+import { logAudit } from "@/lib/audit";
 import { addDays, today } from "@/lib/utils";
 import type { BirdType } from "@/lib/database.types";
 
@@ -231,4 +232,244 @@ export async function addHealthIncident(
   revalidatePath("/app/health");
   revalidatePath("/app");
   return { error: null, ok: "Incident recorded." };
+}
+
+/**
+ * Correct a dose scheduled or given wrong — the vaccine, the date, who gave
+ * it, the batch. Nothing here depends on a vaccination row the way a flock's
+ * bird count depends on daily records, so there is no derived figure to keep
+ * in step; this is a plain field-by-field correction.
+ */
+export async function updateVaccination(
+  _prev: HealthFormState,
+  form: FormData,
+): Promise<HealthFormState> {
+  const session = await requireSession();
+  if (!can(session.role, CAN_WRITE)) {
+    return { error: "Your account has read-only access to this farm.", ok: null };
+  }
+
+  const id = String(form.get("id") ?? "");
+  const vaccine = String(form.get("vaccine") ?? "").trim();
+  const dueDate = String(form.get("due_date") ?? "");
+  if (!id) return { error: "That dose could not be found.", ok: null };
+  if (!vaccine) return { error: "Which vaccine?", ok: null };
+  if (!dueDate) return { error: "When is it due?", ok: null };
+
+  const supabase = await createClient();
+
+  const { data: before } = await supabase
+    .from("edoshatch360_vaccinations")
+    .select("*")
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .maybeSingle();
+  if (!before) return { error: "That dose could not be found.", ok: null };
+
+  const administeredOn = String(form.get("administered_on") ?? "") || null;
+  if (administeredOn && administeredOn > today()) {
+    return { error: "A dose cannot be given in the future.", ok: null };
+  }
+
+  const cost = Number(form.get("cost") ?? 0);
+  const birds = Number(form.get("birds_covered") ?? 0);
+
+  const after = {
+    vaccine,
+    disease_target: String(form.get("disease_target") ?? "").trim() || null,
+    due_date: dueDate,
+    route: String(form.get("route") ?? "").trim() || null,
+    dose: String(form.get("dose") ?? "").trim() || null,
+    manufacturer: String(form.get("manufacturer") ?? "").trim() || null,
+    batch_no: String(form.get("batch_no") ?? "").trim() || null,
+    administered_on: administeredOn,
+    birds_covered: Number.isFinite(birds) && birds > 0 ? Math.round(birds) : null,
+    cost_cents: Number.isFinite(cost) && cost > 0 ? Math.round(cost * 100) : 0,
+    reaction_notes: String(form.get("reaction_notes") ?? "").trim() || null,
+  };
+
+  const { error } = await supabase
+    .from("edoshatch360_vaccinations")
+    .update(after)
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't save that change. Try again.", ok: null };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "vaccination.updated",
+    entityType: "vaccination",
+    entityId: id,
+    before,
+    after,
+  });
+
+  revalidatePath("/app/health");
+  revalidatePath("/app");
+  return { error: null, ok: `${vaccine} updated.` };
+}
+
+/** Remove a dose entered against the wrong flock, or scheduled twice. */
+export async function deleteVaccination(
+  _prev: HealthFormState,
+  form: FormData,
+): Promise<HealthFormState> {
+  const session = await requireSession();
+  if (!can(session.role, CAN_WRITE)) {
+    return { error: "Your account has read-only access to this farm.", ok: null };
+  }
+
+  const id = String(form.get("id") ?? "");
+  const reason = String(form.get("reason") ?? "").trim();
+  if (!id) return { error: "That dose could not be found.", ok: null };
+  if (!reason) return { error: "Say why this is being deleted.", ok: null };
+
+  const supabase = await createClient();
+
+  const { data: record } = await supabase
+    .from("edoshatch360_vaccinations")
+    .select("*")
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .maybeSingle();
+  if (!record) return { error: "That dose could not be found.", ok: null };
+
+  const { error } = await supabase
+    .from("edoshatch360_vaccinations")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't delete that. Try again.", ok: null };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "vaccination.deleted",
+    entityType: "vaccination",
+    entityId: id,
+    reason,
+    before: record,
+  });
+
+  revalidatePath("/app/health");
+  revalidatePath("/app");
+  return { error: null, ok: `${record.vaccine} deleted.` };
+}
+
+/** Correct a health incident logged wrong — the title, symptoms, severity. */
+export async function updateHealthIncident(
+  _prev: HealthFormState,
+  form: FormData,
+): Promise<HealthFormState> {
+  const session = await requireSession();
+  if (!can(session.role, CAN_WRITE)) {
+    return { error: "Your account has read-only access to this farm.", ok: null };
+  }
+
+  const id = String(form.get("id") ?? "");
+  const title = String(form.get("title") ?? "").trim();
+  if (!id) return { error: "That incident could not be found.", ok: null };
+  if (!title) return { error: "Give the incident a short title.", ok: null };
+
+  const supabase = await createClient();
+
+  const { data: before } = await supabase
+    .from("edoshatch360_health_records")
+    .select("*")
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .maybeSingle();
+  if (!before) return { error: "That incident could not be found.", ok: null };
+
+  const after = {
+    title,
+    occurred_on: String(form.get("occurred_on") ?? today()),
+    symptoms: String(form.get("symptoms") ?? "").trim() || null,
+    treatment: String(form.get("treatment") ?? "").trim() || null,
+    severity: String(form.get("severity") ?? "medium"),
+    birds_affected: Number(form.get("birds_affected") ?? 0) || null,
+  };
+
+  const { error } = await supabase
+    .from("edoshatch360_health_records")
+    .update(after)
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't save that change. Try again.", ok: null };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "health_record.updated",
+    entityType: "health_record",
+    entityId: id,
+    before,
+    after,
+  });
+
+  revalidatePath("/app/health");
+  return { error: null, ok: "Incident updated." };
+}
+
+/** Remove an incident logged against the wrong flock, or by mistake. */
+export async function deleteHealthIncident(
+  _prev: HealthFormState,
+  form: FormData,
+): Promise<HealthFormState> {
+  const session = await requireSession();
+  if (!can(session.role, CAN_WRITE)) {
+    return { error: "Your account has read-only access to this farm.", ok: null };
+  }
+
+  const id = String(form.get("id") ?? "");
+  const reason = String(form.get("reason") ?? "").trim();
+  if (!id) return { error: "That incident could not be found.", ok: null };
+  if (!reason) return { error: "Say why this is being deleted.", ok: null };
+
+  const supabase = await createClient();
+
+  const { data: record } = await supabase
+    .from("edoshatch360_health_records")
+    .select("*")
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .maybeSingle();
+  if (!record) return { error: "That incident could not be found.", ok: null };
+
+  const { error } = await supabase
+    .from("edoshatch360_health_records")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't delete that. Try again.", ok: null };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "health_record.deleted",
+    entityType: "health_record",
+    entityId: id,
+    reason,
+    before: record,
+  });
+
+  revalidatePath("/app/health");
+  return { error: null, ok: "Incident deleted." };
 }

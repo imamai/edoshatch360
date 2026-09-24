@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AlertTriangle, CheckCircle2, Pill, Stethoscope, Syringe } from "lucide-react";
 
-import { requireSession } from "@/lib/data/session";
+import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantPlan } from "@/lib/data/plan";
 import { featureFrom } from "@/lib/plans";
@@ -10,27 +10,22 @@ import { getFlocks } from "@/lib/data/flocks";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ButtonLink } from "@/components/ui/button";
 import {
-  AddIncidentForm, AddVaccinationForm, MarkGivenForm, ProgrammeForm, type Person,
+  AddIncidentForm, AddVaccinationForm, ProgrammeForm, type Person,
 } from "./health-forms";
-import { formatNumber, relativeDay, today } from "@/lib/utils";
+import { VaccinationRow } from "./vaccination-row";
+import { IncidentRow } from "./incident-row";
+import { relativeDay, today } from "@/lib/utils";
 import type { HealthRecord, Medication, Vaccination } from "@/lib/database.types";
 import { Bird } from "lucide-react";
 
 export const metadata: Metadata = { title: "Health" };
 
-const SEVERITY_TONE = {
-  low: "neutral",
-  medium: "attention",
-  high: "critical",
-  critical: "critical",
-} as const;
-
 export default async function HealthPage() {
   const session = await requireSession();
+  const canManage = can(session.role, CAN_WRITE);
   // Hidden in the navigation, but a URL still resolves — so the page
   // itself has to know what the plan carries.
   const plan = await getTenantPlan(session.tenant.id);
@@ -191,61 +186,23 @@ export default async function HealthPage() {
                     const isOverdue = v.status !== "done" && v.due_date < t;
                     const givenBy =
                       v.administered_name ??
-                      (v.administered_by ? personName.get(v.administered_by) : null);
+                      (v.administered_by ? (personName.get(v.administered_by) ?? null) : null);
                     const supervisedBy =
                       v.supervisor_name ??
-                      (v.supervised_by ? personName.get(v.supervised_by) : null);
+                      (v.supervised_by ? (personName.get(v.supervised_by) ?? null) : null);
 
                     return (
-                      <li key={v.id} className="px-4 py-3 sm:px-5">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium text-ink">{v.vaccine}</p>
-                            <p className="text-xs text-ink-faint">
-                              {flockCode.get(v.flock_id) ?? "Flock"}
-                              {v.day_of_age !== null ? ` · day ${v.day_of_age}` : ""} ·{" "}
-                              {v.status === "done"
-                                ? `given ${v.administered_on ?? ""}`
-                                : relativeDay(v.due_date)}
-                            </p>
-
-                            {v.status === "done" && (givenBy || supervisedBy || v.batch_no) && (
-                              <p className="mt-1 text-xs text-ink-soft">
-                                {givenBy && <>By {givenBy}</>}
-                                {supervisedBy && <> · supervised by {supervisedBy}</>}
-                                {v.batch_no && <> · batch {v.batch_no}</>}
-                                {v.route && <> · {v.route.toLowerCase()}</>}
-                              </p>
-                            )}
-
-                            {v.reaction_notes && (
-                              <p className="mt-1 text-xs text-attention">
-                                Reaction noted: {v.reaction_notes}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="flex shrink-0 items-center gap-2">
-                            {v.status === "done" ? (
-                              <Badge tone="good" dot>Given</Badge>
-                            ) : (
-                              <Badge tone={isOverdue ? "critical" : "attention"} dot>
-                                {isOverdue ? "Overdue" : "Due"}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-
-                        {v.status !== "done" && (
-                          <MarkGivenForm
-                            id={v.id}
-                            vaccine={v.vaccine}
-                            people={people}
-                            suggestedBirds={flockBirds.get(v.flock_id) ?? 0}
-                            defaultRoute={v.route}
-                          />
-                        )}
-                      </li>
+                      <VaccinationRow
+                        key={v.id}
+                        v={v}
+                        flockCode={flockCode.get(v.flock_id) ?? "Flock"}
+                        givenBy={givenBy}
+                        supervisedBy={supervisedBy}
+                        isOverdue={isOverdue}
+                        people={people}
+                        suggestedBirds={flockBirds.get(v.flock_id) ?? 0}
+                        canManage={canManage}
+                      />
                     );
                   })}
                 </ul>
@@ -269,32 +226,12 @@ export default async function HealthPage() {
               ) : (
                 <ul className="divide-y divide-line">
                   {incidents.map((h) => (
-                    <li key={h.id} className="px-4 py-3 sm:px-5">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-ink">{h.title}</p>
-                          <p className="text-xs text-ink-faint">
-                            {flockCode.get(h.flock_id) ?? "Flock"} · {h.occurred_on}
-                            {h.birds_affected ? ` · ${formatNumber(h.birds_affected)} birds` : ""}
-                          </p>
-                        </div>
-                        {h.severity && (
-                          <Badge tone={SEVERITY_TONE[h.severity]} dot>
-                            {h.severity}
-                          </Badge>
-                        )}
-                      </div>
-                      {h.symptoms && (
-                        <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">
-                          {h.symptoms}
-                        </p>
-                      )}
-                      {h.treatment && (
-                        <p className="mt-1 text-xs leading-relaxed text-ink-faint">
-                          <strong className="text-ink-soft">Done:</strong> {h.treatment}
-                        </p>
-                      )}
-                    </li>
+                    <IncidentRow
+                      key={h.id}
+                      h={h}
+                      flockCode={flockCode.get(h.flock_id) ?? "Flock"}
+                      canManage={canManage}
+                    />
                   ))}
                 </ul>
               )}
