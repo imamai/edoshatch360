@@ -2,12 +2,12 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2, TriangleAlert } from "lucide-react";
+import { Pencil, Trash2, TriangleAlert } from "lucide-react";
 
-import { deleteStockMovement, type StockFormState } from "./actions";
+import { deleteStockMovement, updateStockMovement, type StockFormState } from "./actions";
 import { Button } from "@/components/ui/button";
-import { TextInput } from "@/components/ui/field";
-import { formatMoney, formatNumber, relativeDay } from "@/lib/utils";
+import { NumberInput, TextInput } from "@/components/ui/field";
+import { formatMoney, formatNumber, relativeDay, today } from "@/lib/utils";
 import type { InventoryTxn } from "@/lib/database.types";
 
 const initial: StockFormState = { error: null, ok: null };
@@ -20,6 +20,18 @@ const MOVEMENT_LABEL: Record<string, string> = {
   wastage: "Spoiled",
   transfer: "Transferred",
 };
+
+function Feedback({ state }: { state: StockFormState }) {
+  if (state.error) {
+    return (
+      <p role="alert" className="mt-2 rounded-lg border border-critical/25 bg-critical-soft px-3 py-2 text-xs text-critical">
+        {state.error}
+      </p>
+    );
+  }
+  if (state.ok) return <p className="mt-2 text-xs text-good">{state.ok}</p>;
+  return null;
+}
 
 export function StockMovementRow({
   movement: m,
@@ -34,7 +46,7 @@ export function StockMovementRow({
   currency: string;
   canManage: boolean;
 }) {
-  const [confirming, setConfirming] = useState(false);
+  const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
   const inward = Number(m.quantity) > 0;
 
   return (
@@ -58,21 +70,107 @@ export function StockMovementRow({
               <p className="text-xs text-ink-faint tnum">{formatMoney(m.total_cents, { currency })}</p>
             )}
           </div>
-          {canManage && !confirming && (
-            <button
-              type="button"
-              onClick={() => setConfirming(true)}
-              aria-label={`Delete this movement for ${itemName}`}
-              className="rounded-md p-1.5 text-ink-faint hover:bg-surface-sunk hover:text-critical"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+          {canManage && mode === "view" && (
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => setMode("edit")}
+                aria-label={`Edit this movement for ${itemName}`}
+                className="rounded-md p-1.5 text-ink-faint hover:bg-surface-sunk hover:text-brand"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("delete")}
+                aria-label={`Delete this movement for ${itemName}`}
+                className="rounded-md p-1.5 text-ink-faint hover:bg-surface-sunk hover:text-critical"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           )}
         </div>
       </div>
 
-      {confirming && <DeleteForm m={m} onCancel={() => setConfirming(false)} />}
+      {mode === "edit" && (
+        <EditForm m={m} itemUnit={itemUnit} currency={currency} onDone={() => setMode("view")} />
+      )}
+      {mode === "delete" && <DeleteForm m={m} onCancel={() => setMode("view")} />}
     </li>
+  );
+}
+
+function EditForm({
+  m,
+  itemUnit,
+  currency,
+  onDone,
+}: {
+  m: InventoryTxn;
+  itemUnit: string;
+  currency: string;
+  onDone: () => void;
+}) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState(updateStockMovement, initial);
+
+  useEffect(() => {
+    if (!state.ok) return;
+    router.refresh();
+    const t = setTimeout(onDone, 350);
+    return () => clearTimeout(t);
+  }, [state.ok, router, onDone]);
+
+  return (
+    <form action={action} className="mt-2 flex flex-col gap-3 rounded-lg border border-line bg-surface-sunk p-3">
+      <input type="hidden" name="id" value={m.id} />
+      {/* Not offered for edit here — carried through unchanged so a movement
+          already tied to a flock doesn't silently lose that link. */}
+      <input type="hidden" name="flock_id" value={m.flock_id ?? ""} />
+
+      <p className="text-xs font-medium text-ink-faint">
+        {MOVEMENT_LABEL[m.txn_type] ?? m.txn_type} — the kind of movement is fixed; delete and
+        re-add for that.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <NumberInput
+          label={`How much (${itemUnit})`}
+          name="quantity"
+          decimals
+          required
+          min={0}
+          defaultValue={Math.abs(Number(m.quantity))}
+        />
+        <NumberInput
+          label="Cost per unit"
+          name="unit_cost"
+          unit={currency}
+          decimals
+          min={0}
+          defaultValue={m.unit_cost_cents / 100}
+        />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <TextInput label="Date" name="occurred_on" type="date" defaultValue={m.occurred_on} max={today()} />
+        <TextInput label="Reference" name="reference" defaultValue={m.reference ?? ""} hint="Optional" />
+      </div>
+
+      <TextInput label="Notes" name="notes" defaultValue={m.notes ?? ""} hint="Optional" />
+
+      <Feedback state={state} />
+
+      <div className="flex items-center gap-2">
+        <Button type="submit" size="sm" busy={pending}>
+          {pending ? "Saving" : "Save changes"}
+        </Button>
+        <button type="button" onClick={onDone} className="text-sm font-semibold text-ink-faint hover:text-ink">
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }
 
