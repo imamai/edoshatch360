@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireSession } from "@/lib/data/session";
+import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
+import { logAudit } from "@/lib/audit";
 import { today } from "@/lib/utils";
 import type { ExpenseCategory, InventoryCategory, StockTxn } from "@/lib/database.types";
 
@@ -190,4 +191,218 @@ export async function recordStockMovement(
   revalidatePath("/app/feed");
   revalidatePath("/app");
   return { error: null, ok: "Recorded." };
+}
+
+/** Correct an item's details — name, category, unit, reorder level, cost. */
+export async function updateInventoryItem(
+  _prev: StockFormState,
+  form: FormData,
+): Promise<StockFormState> {
+  const session = await requireSession();
+  if (!can(session.role, CAN_WRITE)) {
+    return { error: "Your account has read-only access to this farm.", ok: null };
+  }
+
+  const id = String(form.get("id") ?? "");
+  const name = String(form.get("name") ?? "").trim();
+  if (!id) return { error: "That item could not be found.", ok: null };
+  if (!name) return { error: "Give the item a name.", ok: null };
+
+  const supabase = await createClient();
+
+  const { data: before } = await supabase
+    .from("edoshatch360_inventory")
+    .select("*")
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .maybeSingle();
+  if (!before) return { error: "That item could not be found.", ok: null };
+
+  const after = {
+    name,
+    category: String(form.get("category") ?? before.category) as InventoryCategory,
+    unit: String(form.get("unit") ?? "").trim() || "kg",
+    reorder_level: Math.max(0, Number(form.get("reorder_level") ?? 0)),
+    unit_cost_cents: Math.round(Math.max(0, Number(form.get("unit_cost") ?? 0)) * 100),
+    supplier: String(form.get("supplier") ?? "").trim() || null,
+  };
+
+  const { error } = await supabase
+    .from("edoshatch360_inventory")
+    .update(after)
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't save that change. Try again.", ok: null };
+
+  // A cost change applies from now on — past movements keep the unit cost
+  // they were recorded at, the same way a product's past sale lines do.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "inventory_item.updated",
+    entityType: "inventory_item",
+    entityId: id,
+    before,
+    after,
+  });
+
+  revalidatePath("/app/inventory");
+  revalidatePath("/app/feed");
+  return { error: null, ok: `${name} updated.` };
+}
+
+/** Take an item off the stock list without losing its movement history. */
+export async function setInventoryItemActive(id: string, active: boolean): Promise<StockFormState> {
+  const session = await requireSession();
+  if (!can(session.role, CAN_WRITE)) {
+    return { error: "Your account has read-only access to this farm.", ok: null };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("edoshatch360_inventory")
+    .update({ is_active: active })
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .select("name")
+    .maybeSingle();
+
+  if (error || !data) return { error: "We couldn't change that item. Try again.", ok: null };
+
+  revalidatePath("/app/inventory");
+  revalidatePath("/app/feed");
+  return {
+    error: null,
+    ok: active ? `${data.name} is back in the stock list.` : `${data.name} archived.`,
+  };
+}
+
+/**
+ * Delete a stock item outright.
+ *
+ * Blocked the moment it has a single movement recorded:
+ * edoshatch360_inventory_transactions.item_id cascades on delete, so
+ * removing the item would silently erase every purchase, use and correction
+ * ever logged against it — the whole ledger the reorder and cost figures
+ * are built from. Archiving is the only option from there; an item added by
+ * mistake with nothing recorded against it can be removed cleanly.
+ */
+export async function deleteInventoryItem(id: string): Promise<StockFormState> {
+  const session = await requireSession();
+  if (!can(session.role, CAN_WRITE)) {
+    return { error: "Your account has read-only access to this farm.", ok: null };
+  }
+
+  const supabase = await createClient();
+
+  const [{ data: item }, { count: txnCount }] = await Promise.all([
+    supabase
+      .from("edoshatch360_inventory")
+      .select("name")
+      .eq("id", id)
+      .eq("tenant_id", session.tenant.id)
+      .maybeSingle(),
+    supabase
+      .from("edoshatch360_inventory_transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("item_id", id),
+  ]);
+
+  if (!item) return { error: "That item could not be found.", ok: null };
+  if ((txnCount ?? 0) > 0) {
+    return {
+      error: `${item.name} has ${txnCount} movement${txnCount === 1 ? "" : "s"} recorded against it. Deleting would erase that history — archive it instead.`,
+      ok: null,
+    };
+  }
+
+  const { error } = await supabase
+    .from("edoshatch360_inventory")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't delete that item. Try again.", ok: null };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "inventory_item.deleted",
+    entityType: "inventory_item",
+    entityId: id,
+    before: item,
+  });
+
+  revalidatePath("/app/inventory");
+  revalidatePath("/app/feed");
+  return { error: null, ok: `${item.name} deleted.` };
+}
+
+/**
+ * Remove a stock movement entered wrong — a duplicate, the wrong item, a
+ * quantity mistyped. edoshatch360_restock_item does a full recompute of the
+ * item's current_stock from every remaining movement, so this can never
+ * leave the stock count skewed by whatever the deleted row used to hold.
+ *
+ * A purchase also records a matching expense when it is entered, with no
+ * link back between the two rows — deleting the movement here does not
+ * remove that expense. The confirmation says so; removing it from Finance,
+ * if it was wrong too, is a separate step.
+ */
+export async function deleteStockMovement(
+  _prev: StockFormState,
+  form: FormData,
+): Promise<StockFormState> {
+  const session = await requireSession();
+  if (!can(session.role, CAN_WRITE)) {
+    return { error: "Your account has read-only access to this farm.", ok: null };
+  }
+
+  const id = String(form.get("id") ?? "");
+  const reason = String(form.get("reason") ?? "").trim();
+  if (!id) return { error: "That movement could not be found.", ok: null };
+  if (!reason) return { error: "Say why this is being deleted.", ok: null };
+
+  const supabase = await createClient();
+
+  const { data: record } = await supabase
+    .from("edoshatch360_inventory_transactions")
+    .select("*")
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .maybeSingle();
+  if (!record) return { error: "That movement could not be found.", ok: null };
+
+  const { error } = await supabase
+    .from("edoshatch360_inventory_transactions")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't delete that movement. Try again.", ok: null };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "inventory_transaction.deleted",
+    entityType: "inventory_transaction",
+    entityId: id,
+    reason,
+    before: record,
+  });
+
+  revalidatePath("/app/inventory");
+  revalidatePath("/app/feed");
+  revalidatePath("/app");
+  return { error: null, ok: "Movement deleted." };
 }

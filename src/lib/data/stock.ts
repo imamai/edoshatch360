@@ -21,6 +21,8 @@ export interface StockData {
 export async function getStock(
   tenantId: string,
   categories?: InventoryCategory[],
+  /** Archived items too, with their own badge — only the management screen wants these. */
+  includeInactive = false,
 ): Promise<StockData> {
   const supabase = await createClient();
   const since = addDays(today(), -30);
@@ -29,8 +31,9 @@ export async function getStock(
     .from("edoshatch360_inventory")
     .select("*")
     .eq("tenant_id", tenantId)
-    .eq("is_active", true)
     .order("name");
+
+  if (!includeInactive) itemQuery = itemQuery.eq("is_active", true);
 
   if (categories?.length) itemQuery = itemQuery.in("category", categories);
 

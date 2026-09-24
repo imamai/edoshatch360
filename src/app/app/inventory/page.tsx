@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AlertTriangle, ArrowDownUp, Boxes, Coins } from "lucide-react";
 
-import { requireSession } from "@/lib/data/session";
+import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { getStock } from "@/lib/data/stock";
 import { getFlocks } from "@/lib/data/flocks";
 
@@ -10,23 +10,15 @@ import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { StockTable } from "@/components/app/stock-table";
+import { StockMovementRow } from "./stock-movement-row";
 import { BreakdownDonut } from "@/components/charts/trend-charts";
 import { MovementForm, NewItemForm } from "./stock-forms";
-import { formatMoney, formatNumber, relativeDay } from "@/lib/utils";
+import { formatMoney, formatNumber } from "@/lib/utils";
 import { getTenantPlan } from "@/lib/data/plan";
 import { featureFrom } from "@/lib/plans";
 import { UpgradeNotice } from "@/components/app/upgrade-notice";
 
 export const metadata: Metadata = { title: "Inventory" };
-
-const MOVEMENT_LABEL: Record<string, string> = {
-  opening: "Opening balance",
-  purchase: "Bought",
-  usage: "Used",
-  adjustment: "Correction",
-  wastage: "Spoiled",
-  transfer: "Transferred",
-};
 
 export default async function InventoryPage() {
   const session = await requireSession();
@@ -37,24 +29,29 @@ export default async function InventoryPage() {
     return <UpgradeNotice what="Inventory" from={featureFrom("inventory")} />;
   }
 
+  const canManage = can(session.role, CAN_WRITE);
   const [{ rows, items, movements }, flocks] = await Promise.all([
-    getStock(session.tenant.id),
+    getStock(session.tenant.id, undefined, true),
     getFlocks(session.tenant.id),
   ]);
 
   const currency = session.tenant.currency;
   const itemName = new Map(items.map((i) => [i.id, i]));
+  // Archived items ride along in `rows` so the table can still show and
+  // restore them; every other figure on this page describes the farm's
+  // active stock, so they are left out of those.
+  const activeRows = rows.filter((r) => r.is_active);
 
-  const totalValue = rows.reduce(
+  const totalValue = activeRows.reduce(
     (a, r) => a + Math.round(r.current_stock * r.unit_cost_cents),
     0,
   );
-  const lowCount = rows.filter(
+  const lowCount = activeRows.filter(
     (r) => r.current_stock <= 0 || (r.reorder_level > 0 && r.current_stock <= r.reorder_level),
   ).length;
 
   const byCategory = [...
-    rows.reduce((map, r) => {
+    activeRows.reduce((map, r) => {
       const value = Math.round(r.current_stock * r.unit_cost_cents);
       const key = r.category.replace(/_/g, " ");
       map.set(key, (map.get(key) ?? 0) + value);
@@ -86,7 +83,7 @@ export default async function InventoryPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
           label="Items tracked"
-          value={rows.length}
+          value={activeRows.length}
           icon={<Boxes className="h-4.5 w-4.5" />}
           tone="brand"
         />
@@ -126,7 +123,7 @@ export default async function InventoryPage() {
                   description="Add what you keep on the farm — feed, vaccines, trays, spare parts — and every purchase and use builds a ledger you can check."
                 />
               ) : (
-                <StockTable rows={rows} currency={currency} />
+                <StockTable rows={rows} currency={currency} canManage={canManage} />
               )}
             </CardBody>
           </Card>
@@ -144,43 +141,16 @@ export default async function InventoryPage() {
                 </p>
               ) : (
                 <ul className="divide-y divide-line">
-                  {movements.slice(0, 25).map((m) => {
-                    const item = itemName.get(m.item_id);
-                    const inward = Number(m.quantity) > 0;
-                    return (
-                      <li
-                        key={m.id}
-                        className="flex items-center justify-between gap-3 px-4 py-2.5 sm:px-5"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-ink">
-                            {item?.name ?? "Item"}
-                          </p>
-                          <p className="text-xs text-ink-faint">
-                            {MOVEMENT_LABEL[m.txn_type] ?? m.txn_type} ·{" "}
-                            {relativeDay(m.occurred_on)}
-                            {m.reference ? ` · ${m.reference}` : ""}
-                          </p>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p
-                            className={`text-sm font-semibold tnum ${
-                              inward ? "text-good" : "text-critical"
-                            }`}
-                          >
-                            {inward ? "+" : ""}
-                            {formatNumber(Number(m.quantity), { decimals: 1 })}{" "}
-                            <span className="font-normal text-ink-faint">{item?.unit}</span>
-                          </p>
-                          {m.total_cents > 0 && (
-                            <p className="text-xs text-ink-faint tnum">
-                              {formatMoney(m.total_cents, { currency })}
-                            </p>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
+                  {movements.slice(0, 25).map((m) => (
+                    <StockMovementRow
+                      key={m.id}
+                      movement={m}
+                      itemName={itemName.get(m.item_id)?.name ?? "Item"}
+                      itemUnit={itemName.get(m.item_id)?.unit ?? ""}
+                      currency={currency}
+                      canManage={canManage}
+                    />
+                  ))}
                 </ul>
               )}
             </CardBody>
@@ -211,7 +181,7 @@ export default async function InventoryPage() {
               />
               <CardBody className="p-0">
                 <ul className="divide-y divide-line">
-                  {rows
+                  {activeRows
                     .filter(
                       (r) =>
                         r.current_stock <= 0 ||
