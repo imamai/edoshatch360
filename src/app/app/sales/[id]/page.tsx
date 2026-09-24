@@ -17,6 +17,7 @@ import {
 } from "@/components/app/sale-document";
 import { PaymentForm } from "./payment-form";
 import { PaymentsList } from "./payments-list";
+import { SaleActions } from "./sale-actions";
 import { PrintButton } from "@/components/app/print-button";
 import type {
   Customer, CustomerPayment, Sale, SaleItem, SaleStatus,
@@ -51,7 +52,7 @@ export default async function SaleDetailPage({
 
   const branding = await getBrandingWithUrls(session.tenant.id);
   const tax = await getTaxSettings(session.tenant.id);
-  const [itemRes, paymentRes, customerRes] = await Promise.all([
+  const [itemRes, paymentRes, customerRes, allCustomersRes] = await Promise.all([
     supabase.from("edoshatch360_sale_items").select("*").eq("sale_id", id).order("sort_order"),
     supabase
       .from("edoshatch360_customer_payments")
@@ -61,11 +62,17 @@ export default async function SaleDetailPage({
     doc.customer_id
       ? supabase.from("edoshatch360_customers").select("*").eq("id", doc.customer_id).maybeSingle()
       : Promise.resolve({ data: null }),
+    supabase
+      .from("edoshatch360_customers")
+      .select("id, name")
+      .eq("tenant_id", session.tenant.id)
+      .order("name"),
   ]);
 
   const items = (itemRes.data ?? []) as SaleItem[];
   const payments = (paymentRes.data ?? []) as CustomerPayment[];
   const customer = customerRes.data as Customer | null;
+  const allCustomers = (allCustomersRes.data ?? []) as Pick<Customer, "id" | "name">[];
   const currency = session.tenant.currency;
   const tenant = session.tenant;
 
@@ -118,6 +125,16 @@ export default async function SaleDetailPage({
           Sales
         </Link>
         <PrintButton />
+      </div>
+
+      <div className="mt-3">
+        <SaleActions
+          sale={doc}
+          items={items}
+          customers={allCustomers}
+          currency={currency}
+          canManage={can(session.role, CAN_WRITE) && can(session.role, CAN_SEE_MONEY)}
+        />
       </div>
 
       {/* ------------------------------------------------- the document -- */}

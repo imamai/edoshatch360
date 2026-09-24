@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Pencil, Trash2, TriangleAlert } from "lucide-react";
 
@@ -81,22 +81,6 @@ function PaymentRow({
   onConfirm: () => void;
   onCancelConfirm: () => void;
 }) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  function remove() {
-    start(async () => {
-      const result = await deletePayment(payment.id);
-      if (result.error) setError(result.error);
-      else {
-        setError(null);
-        onCancelConfirm();
-        router.refresh();
-      }
-    });
-  }
-
   return (
     <li className="px-4 py-3 sm:px-5">
       <div className="flex items-center justify-between gap-3">
@@ -123,7 +107,6 @@ function PaymentRow({
               </button>
               <button
                 type="button"
-                disabled={pending}
                 onClick={onConfirm}
                 aria-label="Delete this payment"
                 className="rounded-md p-1.5 text-ink-faint hover:bg-surface-sunk hover:text-critical"
@@ -136,36 +119,63 @@ function PaymentRow({
       </div>
 
       {confirming && (
-        <div className="mt-3 flex gap-2.5 rounded-lg border border-critical/25 bg-critical-soft px-3 py-2.5">
-          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-critical" aria-hidden="true" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-critical">Delete this payment?</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
-              The balance owed on this document goes back up by{" "}
-              {formatMoney(payment.amount_cents, { currency })}.
-            </p>
-            <div className="mt-2.5 flex gap-2">
-              <Button variant="danger" size="sm" busy={pending} onClick={remove}>
-                Delete
-              </Button>
-              <button
-                type="button"
-                onClick={onCancelConfirm}
-                className="text-sm font-semibold text-ink-faint hover:text-ink"
-              >
-                Keep it
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {error && (
-        <p role="alert" className="mt-2 text-xs text-critical">
-          {error}
-        </p>
+        <DeleteForm payment={payment} currency={currency} onCancel={onCancelConfirm} />
       )}
     </li>
+  );
+}
+
+function DeleteForm({
+  payment,
+  currency,
+  onCancel,
+}: {
+  payment: CustomerPayment;
+  currency: string;
+  onCancel: () => void;
+}) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState(deletePayment, initial);
+
+  useEffect(() => {
+    if (!state.ok) return;
+    router.refresh();
+  }, [state.ok, router]);
+
+  return (
+    <form action={action} className="mt-3 flex gap-2.5 rounded-lg border border-critical/25 bg-critical-soft px-3 py-2.5">
+      <input type="hidden" name="id" value={payment.id} />
+      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-critical" aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-critical">Delete this payment?</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
+          The balance owed on this document goes back up by{" "}
+          {formatMoney(payment.amount_cents, { currency })}.
+        </p>
+        <div className="mt-2">
+          <TextInput
+            label="Why is this being deleted?"
+            name="reason"
+            required
+            placeholder="e.g. recorded against the wrong document"
+            autoFocus
+          />
+        </div>
+        {state.error && (
+          <p role="alert" className="mt-2 text-xs text-critical">
+            {state.error}
+          </p>
+        )}
+        <div className="mt-2.5 flex gap-2">
+          <Button type="submit" variant="danger" size="sm" busy={pending}>
+            Delete
+          </Button>
+          <button type="button" onClick={onCancel} className="text-sm font-semibold text-ink-faint hover:text-ink">
+            Keep it
+          </button>
+        </div>
+      </div>
+    </form>
   );
 }
 
@@ -218,6 +228,12 @@ function EditForm({
           hint="Optional"
         />
       </div>
+      <TextInput
+        label="Why is this being changed?"
+        name="reason"
+        required
+        placeholder="e.g. the amount was typed wrong"
+      />
 
       {state.error && (
         <p role="alert" className="rounded-lg border border-critical/25 bg-critical-soft px-3 py-2 text-sm text-critical">

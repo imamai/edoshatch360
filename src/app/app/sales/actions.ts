@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { CAN_SEE_MONEY, CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import type { Role } from "@/lib/database.types";
+import { logAudit } from "@/lib/audit";
 import { today } from "@/lib/utils";
 import type { Customer, CustomerType, DocType, PayMethod } from "@/lib/database.types";
 
@@ -197,6 +198,12 @@ function canManageMoney(role: Role): boolean {
  * edoshatch360_custpay_rollup recomputes them from every payment on the sale
  * the moment this row changes, the same trigger that fires for
  * recordPayment's insert.
+ *
+ * Two things a money-handling correction needs that a plain field edit does
+ * not: a reason, so "the amount changed" always comes with why, not just
+ * what it changed to; and a record of it, because the row itself only ever
+ * shows the current amount — without edoshatch360_audit_logs there would be
+ * no trace that it was ever anything else.
  */
 export async function updatePayment(
   _prev: SaleFormState,
@@ -209,16 +216,18 @@ export async function updatePayment(
 
   const id = String(form.get("id") ?? "");
   const amount = Number(form.get("amount") ?? 0);
+  const reason = String(form.get("reason") ?? "").trim();
   if (!id) return { error: "That payment could not be found.", ok: null };
   if (!Number.isFinite(amount) || amount <= 0) {
     return { error: "Enter an amount above zero.", ok: null };
   }
+  if (!reason) return { error: "Say why this payment is being changed.", ok: null };
 
   const supabase = await createClient();
 
   const { data: payment } = await supabase
     .from("edoshatch360_customer_payments")
-    .select("sale_id, amount_cents")
+    .select("sale_id, amount_cents, method, reference")
     .eq("id", id)
     .eq("tenant_id", session.tenant.id)
     .maybeSingle();
@@ -244,17 +253,30 @@ export async function updatePayment(
     };
   }
 
+  const method = (String(form.get("method") ?? "cash") || "cash") as PayMethod;
+  const reference = String(form.get("reference") ?? "").trim() || null;
+
   const { error } = await supabase
     .from("edoshatch360_customer_payments")
-    .update({
-      amount_cents: cents,
-      method: (String(form.get("method") ?? "cash") || "cash") as PayMethod,
-      reference: String(form.get("reference") ?? "").trim() || null,
-    })
+    .update({ amount_cents: cents, method, reference })
     .eq("id", id)
     .eq("tenant_id", session.tenant.id);
 
   if (error) return { error: "We couldn't save that change. Try again.", ok: null };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "payment.updated",
+    entityType: "customer_payment",
+    entityId: id,
+    reason,
+    before: { amount_cents: payment.amount_cents, method: payment.method, reference: payment.reference },
+    after: { amount_cents: cents, method, reference, sale_id: payment.sale_id, doc_number: sale.doc_number },
+  });
 
   revalidatePath(`/app/sales/${payment.sale_id}`);
   revalidatePath("/app/sales");
@@ -263,17 +285,25 @@ export async function updatePayment(
 }
 
 /** Remove a payment entered against the wrong sale, or twice by mistake. */
-export async function deletePayment(id: string): Promise<SaleFormState> {
+export async function deletePayment(
+  _prev: SaleFormState,
+  form: FormData,
+): Promise<SaleFormState> {
   const session = await requireSession();
   if (!canManageMoney(session.role)) {
     return { error: "Your account cannot delete payments.", ok: null };
   }
 
+  const id = String(form.get("id") ?? "");
+  const reason = String(form.get("reason") ?? "").trim();
+  if (!id) return { error: "That payment could not be found.", ok: null };
+  if (!reason) return { error: "Say why this payment is being deleted.", ok: null };
+
   const supabase = await createClient();
 
   const { data: payment } = await supabase
     .from("edoshatch360_customer_payments")
-    .select("sale_id")
+    .select("sale_id, amount_cents, method, reference, paid_at")
     .eq("id", id)
     .eq("tenant_id", session.tenant.id)
     .maybeSingle();
@@ -287,10 +317,299 @@ export async function deletePayment(id: string): Promise<SaleFormState> {
 
   if (error) return { error: "We couldn't delete that payment. Try again.", ok: null };
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "payment.deleted",
+    entityType: "customer_payment",
+    entityId: id,
+    reason,
+    before: payment,
+  });
+
   revalidatePath(`/app/sales/${payment.sale_id}`);
   revalidatePath("/app/sales");
   revalidatePath("/app/finance");
   return { error: null, ok: "Payment deleted." };
+}
+
+/**
+ * The details of a sale that never affect money — who it's for, when it was
+ * raised, when it's due, how it was meant to be paid, what the notes say.
+ * Always correctable, even on a settled document: fixing a customer's name
+ * or a mistyped date does not change what anyone owes.
+ */
+export async function updateSaleDetails(
+  _prev: SaleFormState,
+  form: FormData,
+): Promise<SaleFormState> {
+  const session = await requireSession();
+  if (!canManageMoney(session.role)) {
+    return { error: "Your account cannot change sale details.", ok: null };
+  }
+
+  const id = String(form.get("id") ?? "");
+  if (!id) return { error: "That document could not be found.", ok: null };
+
+  const supabase = await createClient();
+
+  const { data: sale } = await supabase
+    .from("edoshatch360_sales")
+    .select("status")
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .maybeSingle();
+  if (!sale) return { error: "That document could not be found.", ok: null };
+  if (sale.status === "cancelled") {
+    return { error: "This document is voided and cannot be changed.", ok: null };
+  }
+
+  const { error } = await supabase
+    .from("edoshatch360_sales")
+    .update({
+      customer_id: String(form.get("customer_id") ?? "") || null,
+      sale_date: String(form.get("sale_date") ?? today()),
+      due_date: String(form.get("due_date") ?? "") || null,
+      payment_method: (String(form.get("payment_method") ?? "") || null) as PayMethod | null,
+      notes: String(form.get("notes") ?? "").trim() || null,
+    })
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't save those changes. Try again.", ok: null };
+
+  revalidatePath(`/app/sales/${id}`);
+  revalidatePath("/app/sales");
+  return { error: null, ok: "Details updated." };
+}
+
+/**
+ * Replace a sale's line items outright — the actual correction for "wrong
+ * item, wrong quantity, wrong price" rather than a workaround.
+ *
+ * Restricted to a document nothing has been paid against yet: the moment a
+ * payment exists it was accepted against a specific total, and rewriting the
+ * items out from under it would leave that amount meaning something
+ * different than it did when it was received. Voiding is the correction
+ * once a document has reached that point.
+ */
+export async function updateSaleItems(
+  _prev: SaleFormState,
+  form: FormData,
+): Promise<SaleFormState> {
+  const session = await requireSession();
+  if (!canManageMoney(session.role)) {
+    return { error: "Your account cannot change sale items.", ok: null };
+  }
+
+  const id = String(form.get("id") ?? "");
+  if (!id) return { error: "That document could not be found.", ok: null };
+
+  let lines: CartLine[] = [];
+  try {
+    lines = JSON.parse(String(form.get("lines") ?? "[]")) as CartLine[];
+  } catch {
+    return { error: "Something went wrong reading the items. Try again.", ok: null };
+  }
+  const valid = lines.filter(
+    (l) => l.description.trim() && l.quantity > 0 && l.unitPrice >= 0,
+  );
+  if (valid.length === 0) {
+    return { error: "Keep at least one item with a quantity and a price.", ok: null };
+  }
+
+  const supabase = await createClient();
+
+  const { data: sale } = await supabase
+    .from("edoshatch360_sales")
+    .select("doc_number, status, amount_paid_cents")
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .maybeSingle();
+  if (!sale) return { error: "That document could not be found.", ok: null };
+  if (sale.status === "cancelled") {
+    return { error: "This document is voided and cannot be changed.", ok: null };
+  }
+  if (sale.amount_paid_cents > 0) {
+    return {
+      error: "A payment has already been recorded against this document, so its items are locked. Void it and raise a new one instead.",
+      ok: null,
+    };
+  }
+
+  const { data: before } = await supabase
+    .from("edoshatch360_sale_items")
+    .select("description, quantity, unit_price_cents, discount_cents")
+    .eq("sale_id", id);
+
+  const { error: deleteError } = await supabase
+    .from("edoshatch360_sale_items")
+    .delete()
+    .eq("sale_id", id)
+    .eq("tenant_id", session.tenant.id);
+  if (deleteError) return { error: "We couldn't save those items. Try again.", ok: null };
+
+  const { error: insertError } = await supabase.from("edoshatch360_sale_items").insert(
+    valid.map((l, i) => ({
+      tenant_id: session.tenant.id,
+      sale_id: id,
+      product_id: l.productId,
+      description: l.description.trim(),
+      quantity: l.quantity,
+      unit_price_cents: Math.round(l.unitPrice * 100),
+      discount_cents: Math.round(Math.max(0, l.discount) * 100),
+      line_total_cents: Math.round(
+        l.quantity * l.unitPrice * 100 - Math.max(0, l.discount) * 100,
+      ),
+      sort_order: i,
+    })),
+  );
+  if (insertError) return { error: "We couldn't save those items. Try again.", ok: null };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "sale.items_updated",
+    entityType: "sale",
+    entityId: id,
+    before: { doc_number: sale.doc_number, items: before ?? [] },
+    after: { items: valid },
+  });
+
+  revalidatePath(`/app/sales/${id}`);
+  revalidatePath("/app/sales");
+  revalidatePath("/app/finance");
+  return { error: null, ok: "Items updated." };
+}
+
+/**
+ * Voiding, not deleting, is the normal way back from a mistaken sale once
+ * anything has happened against it. The document and its number stay on
+ * record — the reason it was voided is folded into its notes, since there is
+ * nowhere else on this record to keep it — and edoshatch360_resum_sale
+ * settles it out of every "owed to you" figure the moment its status flips.
+ */
+export async function voidSale(
+  _prev: SaleFormState,
+  form: FormData,
+): Promise<SaleFormState> {
+  const session = await requireSession();
+  if (!canManageMoney(session.role)) {
+    return { error: "Your account cannot void a sale.", ok: null };
+  }
+
+  const id = String(form.get("id") ?? "");
+  const reason = String(form.get("reason") ?? "").trim();
+  if (!id) return { error: "That document could not be found.", ok: null };
+  if (!reason) return { error: "Say why this is being voided.", ok: null };
+
+  const supabase = await createClient();
+
+  const { data: sale } = await supabase
+    .from("edoshatch360_sales")
+    .select("doc_number, status, notes")
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .maybeSingle();
+  if (!sale) return { error: "That document could not be found.", ok: null };
+  if (sale.status === "cancelled") return { error: "This document is already voided.", ok: null };
+
+  const notes = sale.notes ? `${sale.notes}\n\nVoided: ${reason}` : `Voided: ${reason}`;
+
+  const { error } = await supabase
+    .from("edoshatch360_sales")
+    .update({ status: "cancelled", notes })
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't void that document. Try again.", ok: null };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "sale.voided",
+    entityType: "sale",
+    entityId: id,
+    reason,
+    before: { status: sale.status, doc_number: sale.doc_number },
+    after: { status: "cancelled" },
+  });
+
+  revalidatePath(`/app/sales/${id}`);
+  revalidatePath("/app/sales");
+  revalidatePath("/app/finance");
+  revalidatePath("/app");
+  return { error: null, ok: `${sale.doc_number} voided.` };
+}
+
+/**
+ * A real delete, for a document that should never have existed at all — a
+ * duplicate, a test, something raised against the wrong customer and caught
+ * before any money moved. Blocked the moment a payment exists; void is the
+ * correction from there, so a receipt of money is never the thing that
+ * disappears.
+ */
+export async function deleteSale(id: string): Promise<SaleFormState> {
+  const session = await requireSession();
+  if (!canManageMoney(session.role)) {
+    return { error: "Your account cannot delete a sale.", ok: null };
+  }
+
+  const supabase = await createClient();
+
+  const [{ data: sale }, { data: items }] = await Promise.all([
+    supabase
+      .from("edoshatch360_sales")
+      .select("doc_number, doc_type, sale_date, customer_id, amount_paid_cents")
+      .eq("id", id)
+      .eq("tenant_id", session.tenant.id)
+      .maybeSingle(),
+    supabase
+      .from("edoshatch360_sale_items")
+      .select("description, quantity, unit_price_cents")
+      .eq("sale_id", id),
+  ]);
+  if (!sale) return { error: "That document could not be found.", ok: null };
+  if (sale.amount_paid_cents > 0) {
+    return {
+      error: "A payment has already been recorded against this document. Void it instead of deleting it.",
+      ok: null,
+    };
+  }
+
+  const { error } = await supabase
+    .from("edoshatch360_sales")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't delete that document. Try again.", ok: null };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await logAudit({
+    tenantId: session.tenant.id,
+    userId: user?.id ?? null,
+    action: "sale.deleted",
+    entityType: "sale",
+    entityId: id,
+    before: { ...sale, items: items ?? [] },
+  });
+
+  revalidatePath("/app/sales");
+  revalidatePath("/app/finance");
+  revalidatePath("/app");
+  return { error: null, ok: `${sale.doc_number} deleted.` };
 }
 
 export async function createCustomer(
