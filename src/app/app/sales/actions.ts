@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
+import { CAN_SEE_MONEY, CAN_WRITE, can, requireSession } from "@/lib/data/session";
+import type { Role } from "@/lib/database.types";
 import { today } from "@/lib/utils";
 import type { Customer, CustomerType, DocType, PayMethod } from "@/lib/database.types";
 
@@ -178,6 +179,118 @@ export async function recordPayment(
   revalidatePath("/app/sales");
   revalidatePath("/app/finance");
   return { error: null, ok: "Payment recorded." };
+}
+
+/**
+ * Payments touch money owed directly, so correcting one needs both write
+ * access and the ability to see the books at all — a worker or supervisor
+ * who can enter a sale still cannot rewrite what a customer has paid.
+ */
+function canManageMoney(role: Role): boolean {
+  return can(role, CAN_WRITE) && can(role, CAN_SEE_MONEY);
+}
+
+/**
+ * Correct a payment entered wrong — the wrong amount, method or reference.
+ *
+ * The sale's totals and status are never touched here directly:
+ * edoshatch360_custpay_rollup recomputes them from every payment on the sale
+ * the moment this row changes, the same trigger that fires for
+ * recordPayment's insert.
+ */
+export async function updatePayment(
+  _prev: SaleFormState,
+  form: FormData,
+): Promise<SaleFormState> {
+  const session = await requireSession();
+  if (!canManageMoney(session.role)) {
+    return { error: "Your account cannot change payments.", ok: null };
+  }
+
+  const id = String(form.get("id") ?? "");
+  const amount = Number(form.get("amount") ?? 0);
+  if (!id) return { error: "That payment could not be found.", ok: null };
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: "Enter an amount above zero.", ok: null };
+  }
+
+  const supabase = await createClient();
+
+  const { data: payment } = await supabase
+    .from("edoshatch360_customer_payments")
+    .select("sale_id, amount_cents")
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .maybeSingle();
+  if (!payment) return { error: "That payment could not be found.", ok: null };
+
+  const { data: sale } = await supabase
+    .from("edoshatch360_sales")
+    .select("total_cents, amount_paid_cents, doc_number")
+    .eq("id", payment.sale_id)
+    .maybeSingle();
+  if (!sale) return { error: "That sale could not be found.", ok: null };
+
+  const cents = Math.round(amount * 100);
+  // Room for THIS payment is the total minus everything else already paid —
+  // not the current balance, which already has this payment's old amount
+  // baked in and would let it grow without bound.
+  const paidByOthers = sale.amount_paid_cents - payment.amount_cents;
+  const room = sale.total_cents - paidByOthers;
+  if (cents > room) {
+    return {
+      error: `That is more than ${sale.doc_number} comes to. The most this payment can be is ${(room / 100).toLocaleString()}.`,
+      ok: null,
+    };
+  }
+
+  const { error } = await supabase
+    .from("edoshatch360_customer_payments")
+    .update({
+      amount_cents: cents,
+      method: (String(form.get("method") ?? "cash") || "cash") as PayMethod,
+      reference: String(form.get("reference") ?? "").trim() || null,
+    })
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't save that change. Try again.", ok: null };
+
+  revalidatePath(`/app/sales/${payment.sale_id}`);
+  revalidatePath("/app/sales");
+  revalidatePath("/app/finance");
+  return { error: null, ok: "Payment updated." };
+}
+
+/** Remove a payment entered against the wrong sale, or twice by mistake. */
+export async function deletePayment(id: string): Promise<SaleFormState> {
+  const session = await requireSession();
+  if (!canManageMoney(session.role)) {
+    return { error: "Your account cannot delete payments.", ok: null };
+  }
+
+  const supabase = await createClient();
+
+  const { data: payment } = await supabase
+    .from("edoshatch360_customer_payments")
+    .select("sale_id")
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id)
+    .maybeSingle();
+  if (!payment) return { error: "That payment could not be found.", ok: null };
+
+  const { error } = await supabase
+    .from("edoshatch360_customer_payments")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", session.tenant.id);
+
+  if (error) return { error: "We couldn't delete that payment. Try again.", ok: null };
+
+  revalidatePath(`/app/sales/${payment.sale_id}`);
+  revalidatePath("/app/sales");
+  revalidatePath("/app/finance");
+  return { error: null, ok: "Payment deleted." };
 }
 
 export async function createCustomer(

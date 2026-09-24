@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Wallet } from "lucide-react";
 
-import { CAN_SEE_MONEY, can, requireSession } from "@/lib/data/session";
+import { CAN_SEE_MONEY, CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { getBrandingWithUrls } from "@/lib/data/branding";
 import { getTaxSettings, vatLabel } from "@/lib/data/tax";
 import { createClient } from "@/lib/supabase/server";
@@ -16,8 +16,8 @@ import {
   type SaleDocumentModel,
 } from "@/components/app/sale-document";
 import { PaymentForm } from "./payment-form";
+import { PaymentsList } from "./payments-list";
 import { PrintButton } from "@/components/app/print-button";
-import { formatDate, formatMoney } from "@/lib/utils";
 import type {
   Customer, CustomerPayment, Sale, SaleItem, SaleStatus,
 } from "@/lib/database.types";
@@ -151,31 +151,11 @@ export default async function SaleDetailPage({
               icon={<Wallet className="h-4 w-4" />}
             />
             <CardBody className="p-0">
-              {payments.length === 0 ? (
-                <p className="px-5 py-8 text-center text-sm text-ink-faint">
-                  Nothing received against this document yet.
-                </p>
-              ) : (
-                <ul className="divide-y divide-line">
-                  {payments.map((p) => (
-                    <li
-                      key={p.id}
-                      className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-ink capitalize">{p.method}</p>
-                        <p className="text-xs text-ink-faint">
-                          {formatDate(p.paid_at)}
-                          {p.reference ? ` · ${p.reference}` : ""}
-                        </p>
-                      </div>
-                      <span className="text-sm font-semibold text-good tnum">
-                        {formatMoney(p.amount_cents, { currency })}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <PaymentsList
+                payments={payments}
+                currency={currency}
+                canManage={can(session.role, CAN_WRITE) && can(session.role, CAN_SEE_MONEY)}
+              />
             </CardBody>
           </Card>
 
