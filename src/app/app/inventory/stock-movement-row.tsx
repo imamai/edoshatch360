@@ -92,11 +92,11 @@ function DeleteForm({ m, onCancel }: { m: InventoryTxn; onCancel: () => void }) 
         <p className="text-sm font-semibold text-critical">Delete this movement?</p>
         <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
           The item&rsquo;s stock on hand is recalculated from what remains.
-          {m.txn_type === "purchase" && (
+          {m.expense_id && (
             <>
               {" "}
-              If it was bought stock, it was also recorded as an expense — that is not removed
-              automatically; delete it from Finance separately if it was wrong too.
+              This purchase also recorded an expense in Finance — it is removed along with the
+              movement, not left behind.
             </>
           )}
         </p>

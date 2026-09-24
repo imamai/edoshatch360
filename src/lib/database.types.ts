@@ -289,6 +289,8 @@ export interface InventoryTxn {
   notes: string | null;
   created_by: string | null;
   created_at: string;
+  /** The expense a "purchase" movement created, if it did. Never set otherwise. */
+  expense_id: string | null;
 }
 
 export interface Customer {

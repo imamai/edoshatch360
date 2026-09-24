@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { CAN_WRITE, can, requireSession } from "@/lib/data/session";
+import { CAN_SEE_MONEY, CAN_WRITE, can, requireSession } from "@/lib/data/session";
 import { logAudit } from "@/lib/audit";
 import { today } from "@/lib/utils";
 import type { ExpenseCategory, InventoryCategory, StockTxn } from "@/lib/database.types";
@@ -151,6 +151,38 @@ export async function recordStockMovement(
     };
   }
 
+  // A purchase is money out — mirror it into expenses so the finance figures
+  // include feed bought, without the farmer entering it twice. Created before
+  // the movement itself so the movement can carry the link back to it —
+  // edoshatch360_inventory_transactions.expense_id, added specifically so
+  // deleting the movement later can take this expense with it rather than
+  // leaving it behind with nothing pointing to what it was for.
+  //
+  // RLS refuses this insert for operational roles (worker, supervisor, vet),
+  // which is intended: they can record that stock was bought without the
+  // purchase price entering the books under their name. That failure is
+  // ignored rather than surfaced — the stock movement itself, saved next,
+  // is what the person actually came here to do, and it just carries no
+  // expense_id when there is no expense to link to.
+  let expenseId: string | null = null;
+  if (type === "purchase" && unitCost > 0) {
+    const { data: expense } = await supabase
+      .from("edoshatch360_expenses")
+      .insert({
+        tenant_id: session.tenant.id,
+        farm_id: session.farms[0]?.id ?? null,
+        category: EXPENSE_FOR[item.category as InventoryCategory] ?? "other",
+        description: `${item.name} — ${Math.abs(quantity)} ${item.unit}`,
+        amount_cents: Math.round(Math.abs(quantity) * unitCost * 100),
+        expense_date: String(form.get("occurred_on") ?? today()),
+        vendor: String(form.get("reference") ?? "").trim() || null,
+      })
+      .select("id")
+      .maybeSingle();
+    expenseId = expense?.id ?? null;
+    revalidatePath("/app/finance");
+  }
+
   const { error } = await supabase.from("edoshatch360_inventory_transactions").insert({
     tenant_id: session.tenant.id,
     item_id: itemId,
@@ -162,30 +194,10 @@ export async function recordStockMovement(
     flock_id: String(form.get("flock_id") ?? "") || null,
     occurred_on: String(form.get("occurred_on") ?? today()),
     notes: String(form.get("notes") ?? "").trim() || null,
+    expense_id: expenseId,
   });
 
   if (error) return { error: "We couldn't record that movement. Try again.", ok: null };
-
-  // A purchase is money out — mirror it into expenses so the finance figures
-  // include feed bought, without the farmer entering it twice.
-  //
-  // RLS refuses this insert for operational roles (worker, supervisor, vet),
-  // which is intended: they can record that stock was bought without the
-  // purchase price entering the books under their name. The stock movement
-  // itself has already been saved, so the failure is ignored rather than
-  // surfaced as an error the person can do nothing about.
-  if (type === "purchase" && unitCost > 0) {
-    await supabase.from("edoshatch360_expenses").insert({
-      tenant_id: session.tenant.id,
-      farm_id: session.farms[0]?.id ?? null,
-      category: EXPENSE_FOR[item.category as InventoryCategory] ?? "other",
-      description: `${item.name} — ${Math.abs(quantity)} ${item.unit}`,
-      amount_cents: Math.round(Math.abs(quantity) * unitCost * 100),
-      expense_date: String(form.get("occurred_on") ?? today()),
-      vendor: String(form.get("reference") ?? "").trim() || null,
-    });
-    revalidatePath("/app/finance");
-  }
 
   revalidatePath("/app/inventory");
   revalidatePath("/app/feed");
@@ -351,10 +363,13 @@ export async function deleteInventoryItem(id: string): Promise<StockFormState> {
  * item's current_stock from every remaining movement, so this can never
  * leave the stock count skewed by whatever the deleted row used to hold.
  *
- * A purchase also records a matching expense when it is entered, with no
- * link back between the two rows — deleting the movement here does not
- * remove that expense. The confirmation says so; removing it from Finance,
- * if it was wrong too, is a separate step.
+ * A purchase also records a matching expense when it is entered.
+ * expense_id carries the link back, so that expense is removed along with
+ * the movement that created it, rather than being left behind with nothing
+ * pointing to what it was for. An account that cannot see the books cannot
+ * insert that expense in the first place (RLS), so it is not allowed to
+ * delete one here either — refused outright rather than silently deleting
+ * a financial record the same account could not otherwise touch.
  */
 export async function deleteStockMovement(
   _prev: StockFormState,
@@ -380,6 +395,13 @@ export async function deleteStockMovement(
     .maybeSingle();
   if (!record) return { error: "That movement could not be found.", ok: null };
 
+  if (record.expense_id && !can(session.role, CAN_SEE_MONEY)) {
+    return {
+      error: "This movement created an expense, and your account cannot see the books. Ask an owner or accountant to remove it.",
+      ok: null,
+    };
+  }
+
   const { error } = await supabase
     .from("edoshatch360_inventory_transactions")
     .delete()
@@ -387,6 +409,14 @@ export async function deleteStockMovement(
     .eq("tenant_id", session.tenant.id);
 
   if (error) return { error: "We couldn't delete that movement. Try again.", ok: null };
+
+  // The expense is a side effect of this movement, not an independent
+  // record — set null on delete means it survives if the movement's delete
+  // ever fails partway, but once the movement is gone, it goes too.
+  if (record.expense_id) {
+    await supabase.from("edoshatch360_expenses").delete().eq("id", record.expense_id).eq("tenant_id", session.tenant.id);
+    revalidatePath("/app/finance");
+  }
 
   const {
     data: { user },
@@ -404,5 +434,8 @@ export async function deleteStockMovement(
   revalidatePath("/app/inventory");
   revalidatePath("/app/feed");
   revalidatePath("/app");
-  return { error: null, ok: "Movement deleted." };
+  return {
+    error: null,
+    ok: record.expense_id ? "Movement deleted, and its expense with it." : "Movement deleted.",
+  };
 }
